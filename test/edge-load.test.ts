@@ -2,7 +2,7 @@ import { $createCodeNode } from "@lexical/code";
 import { $createLinkNode } from "@lexical/link";
 import { $createListItemNode, $createListNode } from "@lexical/list";
 import { $createHeadingNode } from "@lexical/rich-text";
-import { $createTextNode, $getRoot } from "lexical";
+import { $createTextNode } from "lexical";
 import { describe, expect, it, vi } from "vitest";
 
 import {

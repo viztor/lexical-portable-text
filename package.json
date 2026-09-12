@@ -65,7 +65,7 @@
     "lexical": ">=0.30.0 <1.0.0"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "packageManager": "pnpm@12.3.4"
 }

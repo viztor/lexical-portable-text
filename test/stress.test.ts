@@ -160,15 +160,11 @@ describe("stress: deep structures", () => {
       text(`part${index} `, index % 2 === 0 ? 1 : 0),
     );
     const blocks = lexicalToPortableText(
-      state(
-        ...[
-          {
-            type: "paragraph",
-            version: 1,
-            children,
-          },
-        ],
-      ),
+      state({
+        type: "paragraph",
+        version: 1,
+        children,
+      }),
       { keyGenerator: counterKeys() },
     );
     expect((blocks[0] as { children: PortableTextSpan[] }).children).toHaveLength(100);
