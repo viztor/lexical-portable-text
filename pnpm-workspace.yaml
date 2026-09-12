@@ -1,0 +1,2 @@
+# Fence this repo off from parent workspace roots (e.g. ~).
+packages: []

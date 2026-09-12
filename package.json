@@ -1,0 +1,71 @@
+{
+  "name": "lexical-portable-text",
+  "version": "0.1.0",
+  "description": "Convert Lexical editor state to and from Portable Text",
+  "keywords": [
+    "blocks",
+    "converter",
+    "lexical",
+    "portable-text",
+    "portabletext",
+    "rich-text"
+  ],
+  "homepage": "https://github.com/railmanio/lexical-portable-text#readme",
+  "bugs": {
+    "url": "https://github.com/railmanio/lexical-portable-text/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/railmanio/lexical-portable-text.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint src test",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck",
+    "verify": "pnpm check && pnpm test && pnpm build",
+    "prepublishOnly": "pnpm verify"
+  },
+  "dependencies": {
+    "@portabletext/types": "^4.0.2"
+  },
+  "devDependencies": {
+    "@lexical/code": "0.50.0",
+    "@lexical/headless": "0.50.0",
+    "@lexical/link": "0.50.0",
+    "@lexical/list": "0.50.0",
+    "@lexical/rich-text": "0.50.0",
+    "@types/node": "^26.5.1",
+    "lexical": "0.50.0",
+    "oxfmt": "0.67.0",
+    "oxlint": "1.82.0",
+    "typescript": "7.0.2",
+    "vitest": "^5.0.0"
+  },
+  "peerDependencies": {
+    "lexical": ">=0.30.0 <1.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@12.3.4"
+}
