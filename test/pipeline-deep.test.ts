@@ -18,9 +18,6 @@ import { canonicalize, counterKeys, factories, makeEditor, textOf } from "./help
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
-let keyCounter = 0;
-const deterministicKeys = (): string => `d${(keyCounter += 1)}`;
-
 const badge: CustomBlockDefinition = {
   type: "badge",
   save: (node, ctx) => ({
@@ -266,7 +263,7 @@ describe("definePipeline — nesting and stacking", () => {
         {
           type: "callout",
           save: (node, ctx) => ({ _type: "callout", _key: ctx.key() }),
-          load: (block: ArbitraryTypedObject) => new CalloutNode("note"),
+          load: (_block: ArbitraryTypedObject) => new CalloutNode("note"),
         },
       ] as CustomBlockDefinition[],
       { factories, save: { keyGenerator: counterKeys() } },
