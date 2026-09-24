@@ -124,6 +124,56 @@ portableTextToLexical(editor, blocks, {
 Rules may return `null` to delegate to default handling — the same escape
 hatch Lexical's own markdown transformers use.
 
+### Bundled custom blocks: `definePipeline` (recommended)
+
+When you control both directions, declare them **together** — one definition
+object carries the shared `type` plus a `save` and a `load` half, and
+`definePipeline` wires them into both converters, statically flagging any
+definition that only transpiles one way:
+
+```ts
+import { definePipeline } from "lexical-portable-text";
+
+const pipeline = definePipeline(
+  [
+    {
+      type: "callout", // Lexical node type AND Portable Text _type
+      save: (node, ctx) => ({
+        _type: "callout",
+        _key: ctx.key(),
+        tone: node.tone ?? "note",
+      }),
+      load: (block) => $createCalloutNode(block.tone ?? "note"),
+    },
+    {
+      type: "comment",
+      annotation: true, // mark definition wrapper (markDefs), not a block
+      save: (node, ctx) => ({ _type: "comment", _key: ctx.key(), commentId: node.commentId }),
+      load: (def, children) => $createCommentNode(def.commentId).append(...children),
+    },
+  ],
+  { factories, ...myOtherOptions },
+);
+
+pipeline.issues; // [] — one {direction, message} entry per one-sided definition
+pipeline.saveOptions; // -> lexicalToPortableText
+pipeline.loadOptions(factories); // -> portableTextToLexical
+pipeline.verify(editor); // runs the full probe check suite from below
+```
+
+Key properties:
+
+- **Pairing is static.** A definition with only a `save` half is flagged with
+  `{ direction: "load", ... }` (and vice versa) instead of silently losing one
+  direction; the half that exists is still wired and still verified.
+- **Annotations vs blocks** are distinguished with `annotation: true`, which
+  routes the `load` half's `def, children` signature correctly.
+- **Base options merge**: your own hand-written rules, mark names, key
+  generator, and `preserve*` flags are preserved and applied in addition to the
+  generated rules.
+- **`verify()` reuses the probe system** below — one call validates the entire
+  custom pipeline against the real probe document set.
+
 ### Custom mark definitions / annotations
 
 Handle annotations (comments, internal links, footnotes) on text spans — in
@@ -441,7 +491,7 @@ is reported as a problem rather than silently skipped.
 pnpm test
 ```
 
-263+ cases across 11 test files:
+287 cases across 13 test files:
 
 - **features** (`features.test.ts`) — checklists with checked state,
   autolinks, link metadata, custom mark definitions/annotations, inline objects,

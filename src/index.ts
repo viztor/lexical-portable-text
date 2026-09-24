@@ -30,6 +30,14 @@ export {
 export { portableTextToPlainText, type ToPlainTextOptions } from "./toPlainText.js";
 
 export {
+  definePipeline,
+  type CustomBlockDefinition,
+  type ConverterPipelineResult,
+  type PipelineIssue,
+  type DefinePipelineOptions,
+} from "./defineCustomBlock.js";
+
+export {
   allSetupChecksPassed,
   formatSetupChecks,
   verifySetup,
