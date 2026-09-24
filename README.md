@@ -1,6 +1,6 @@
 # lexical-portable-text
 
-[![CI](https://github.com/railmanio/lexical-portable-text/actions/workflows/ci.yml/badge.svg)](https://github.com/railmanio/lexical-portable-text/actions/workflows/ci.yml)
+[![CI](https://github.com/viztor/lexical-portable-text/actions/workflows/ci.yml/badge.svg)](https://github.com/viztor/lexical-portable-text/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/lexical-portable-text)](https://www.npmjs.com/package/lexical-portable-text)
 
 Convert [Lexical](https://lexical.dev) editor state to and from

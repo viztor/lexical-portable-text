@@ -1,6 +1,6 @@
 {
   "name": "lexical-portable-text",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Convert Lexical editor state to and from Portable Text",
   "keywords": [
     "blocks",
