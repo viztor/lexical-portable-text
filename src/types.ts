@@ -25,9 +25,44 @@ export type PortableTextObjectBlock = ArbitraryTypedObject;
 
 /**
  * Any block in a Portable Text array: text blocks (`_type: "block"`) and
- * object blocks (`code`, `image`, custom `_type`s).
+ * object blocks (`code`, `image`, `table`, custom `_type`s).
  */
 export type PortableTextContent = PortableTextBlock | PortableTextObjectBlock;
+
+/** Standard Portable Text link mark definition with common metadata. */
+export interface PortableTextLinkMarkDefinition extends PortableTextMarkDefinition {
+  _type: "link";
+  href: string;
+  title?: string;
+  target?: string;
+  rel?: string;
+  [key: string]: unknown;
+}
+
+/** Standard Portable Text table row. */
+export interface PortableTextTableRow extends ArbitraryTypedObject {
+  _type: "tableRow";
+  cells: string[];
+}
+
+/** Standard Portable Text table block. */
+export interface PortableTextTableBlock extends ArbitraryTypedObject {
+  _type: "table";
+  rows: PortableTextTableRow[];
+}
+
+/** Standard Portable Text image block. */
+export interface PortableTextImageBlock extends ArbitraryTypedObject {
+  _type: "image";
+  url?: string;
+  asset?: { _ref?: string; [key: string]: unknown };
+  alt?: string;
+  title?: string;
+  caption?: string;
+  width?: number;
+  height?: number;
+  [key: string]: unknown;
+}
 
 /** Minimal structural view of Lexical's serialized editor state. */
 export interface SerializedLexicalState {
@@ -42,22 +77,54 @@ export interface SerializedLexicalNode {
 
 export interface SerializedElementNode extends SerializedLexicalNode {
   children: SerializedLexicalNode[];
+  format?: string | number;
+  indent?: number;
+  direction?: "ltr" | "rtl" | null;
 }
 
 export interface SerializedTextNode extends SerializedLexicalNode {
   text: string;
   /** Lexical text-format bitmask (bold=1, italic=2, …). */
   format: number;
+  style?: string;
+  detail?: number;
+  mode?: string;
 }
 
 export interface SerializedLinkNode extends SerializedElementNode {
   url: string;
+  title?: string | null;
+  target?: string | null;
+  rel?: string | null;
 }
 
-/** Anything that can produce a serialized state: state JSON or an editor. */
+export interface SerializedListItemNode extends SerializedElementNode {
+  value?: number;
+  checked?: boolean;
+}
+
+export interface SerializedCodeNode extends SerializedElementNode {
+  language?: string | null;
+  filename?: string | null;
+}
+
+export interface SerializedImageNode extends SerializedLexicalNode {
+  type: "image";
+  src: string;
+  altText?: string;
+  title?: string;
+  caption?: string;
+  width?: number;
+  height?: number;
+}
+
+/** Anything that can produce a serialized state: state JSON, single element node, array of nodes, or an editor. */
 export type LexicalStateInput =
   | SerializedLexicalState
-  | { getEditorState(): { toJSON(): SerializedLexicalState } };
+  | SerializedElementNode
+  | SerializedLexicalNode[]
+  | { getEditorState(): { toJSON(): SerializedLexicalState } }
+  | { toJSON(): SerializedLexicalState };
 
 export type KeyGenerator = () => string;
 

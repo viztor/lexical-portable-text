@@ -4,7 +4,7 @@
  */
 import { CodeHighlightNode, CodeNode, $createCodeNode } from "@lexical/code";
 import { createHeadlessEditor } from "@lexical/headless";
-import { LinkNode, $createLinkNode } from "@lexical/link";
+import { AutoLinkNode, LinkNode, $createLinkNode } from "@lexical/link";
 import { ListItemNode, ListNode, $createListItemNode, $createListNode } from "@lexical/list";
 import { HeadingNode, QuoteNode, $createHeadingNode, $createQuoteNode } from "@lexical/rich-text";
 import {
@@ -68,6 +68,17 @@ export const listItem = (...children: SerializedLexicalNode[]): SerializedLexica
   children,
 });
 
+export const checkListItem = (
+  checked: boolean,
+  ...children: SerializedLexicalNode[]
+): SerializedLexicalNode => ({
+  type: "listitem",
+  version: 1,
+  value: 1,
+  checked,
+  children,
+});
+
 export const code = (language: string | null, value: string): SerializedLexicalNode => ({
   type: "code",
   version: 1,
@@ -75,10 +86,62 @@ export const code = (language: string | null, value: string): SerializedLexicalN
   children: [{ type: "code-highlight", version: 1, text: value, format: 0 }],
 });
 
+export const codeWithFilename = (
+  language: string | null,
+  value: string,
+  filename?: string,
+): SerializedLexicalNode => ({
+  type: "code",
+  version: 1,
+  language,
+  filename,
+  children: [{ type: "code-highlight", version: 1, text: value, format: 0 }],
+});
+
 export const link = (url: string, ...children: SerializedLexicalNode[]): SerializedLexicalNode => ({
   type: "link",
   version: 1,
   url,
+  children,
+});
+
+export const autolink = (
+  url: string,
+  ...children: SerializedLexicalNode[]
+): SerializedLexicalNode => ({
+  type: "autolink",
+  version: 1,
+  url,
+  children,
+});
+
+export const linkWithMeta = (
+  url: string,
+  meta: { title?: string; target?: string; rel?: string },
+  ...children: SerializedLexicalNode[]
+): SerializedLexicalNode => ({
+  type: "link",
+  version: 1,
+  url,
+  ...meta,
+  children,
+});
+
+export const table = (...rows: SerializedLexicalNode[]): SerializedLexicalNode => ({
+  type: "table",
+  version: 1,
+  children: rows,
+});
+
+export const tableRow = (...cells: SerializedLexicalNode[]): SerializedLexicalNode => ({
+  type: "tablerow",
+  version: 1,
+  children: cells,
+});
+
+export const tableCell = (...children: SerializedLexicalNode[]): SerializedLexicalNode => ({
+  type: "tablecell",
+  version: 1,
   children,
 });
 
@@ -111,6 +174,7 @@ export function makeEditor(extraNodes: Array<Klass<LexicalNode>> = []): LexicalE
       ListNode,
       ListItemNode,
       LinkNode,
+      AutoLinkNode,
       CodeNode,
       CodeHighlightNode,
       ...extraNodes,
@@ -130,7 +194,10 @@ export const factories: LexicalNodeFactories = {
   list: (listType, children) => $createListNode(listType).append(...children),
   listItem: (children, meta) => $createListItemNode(meta.checked).append(...children),
   code: (language, children) => $createCodeNode(language ?? undefined).append(...children),
-  link: (url, children) => $createLinkNode(url).append(...children),
+  link: (url, children, meta) => {
+    const attrs = meta ? { target: meta.target, rel: meta.rel, title: meta.title } : undefined;
+    return $createLinkNode(url, attrs).append(...children);
+  },
   linebreak: () => $createLineBreakNode(),
 };
 

@@ -205,6 +205,52 @@ describe("lexicalToPortableText — links", () => {
       markDefs: [{ _type: "link", href: undefined }],
     });
   });
+
+  it("converts autolink node to link mark definition", () => {
+    const [block] = lexicalToPortableText(
+      state(
+        paragraph({
+          type: "autolink",
+          version: 1,
+          url: "https://auto.dev",
+          children: [text("https://auto.dev")],
+        }),
+      ),
+      { keyGenerator: counterKeys() },
+    );
+    expect(block).toMatchObject({
+      markDefs: [{ _type: "link", href: "https://auto.dev" }],
+      children: [{ text: "https://auto.dev", marks: ["k2"] }],
+    });
+  });
+
+  it("preserves title, target, and rel on links", () => {
+    const [block] = lexicalToPortableText(
+      state(
+        paragraph({
+          type: "link",
+          version: 1,
+          url: "https://example.com",
+          title: "Tooltip",
+          target: "_blank",
+          rel: "noopener",
+          children: [text("Link with meta")],
+        }),
+      ),
+      { keyGenerator: counterKeys() },
+    );
+    expect(block).toMatchObject({
+      markDefs: [
+        {
+          _type: "link",
+          href: "https://example.com",
+          title: "Tooltip",
+          target: "_blank",
+          rel: "noopener",
+        },
+      ],
+    });
+  });
 });
 
 describe("lexicalToPortableText — linebreaks", () => {
@@ -273,6 +319,23 @@ describe("lexicalToPortableText — lists", () => {
       keyGenerator: counterKeys(),
     });
     expect(blocks).toMatchObject([{ _type: "block", listItem: "bullet" }]);
+  });
+
+  it("maps check lists to check items with checked boolean when checkListMapping is check", () => {
+    const blocks = lexicalToPortableText(
+      state(
+        list(
+          "check",
+          { type: "listitem", version: 1, value: 1, checked: true, children: [text("Done")] },
+          { type: "listitem", version: 1, value: 2, checked: false, children: [text("Pending")] },
+        ),
+      ),
+      { keyGenerator: counterKeys(), checkListMapping: "check" },
+    );
+    expect(blocks).toMatchObject([
+      { _type: "block", listItem: "check", checked: true, children: [{ text: "Done" }] },
+      { _type: "block", listItem: "check", checked: false, children: [{ text: "Pending" }] },
+    ]);
   });
 
   it("emits nested levels for nested lists", () => {
@@ -497,6 +560,82 @@ describe("lexicalToPortableText — rules", () => {
       rules: [{ type: "callout", toPortableText: () => null }],
     });
     expect(blocks[0]).toMatchObject({ _type: "block" });
+  });
+
+  it("supports inline rules producing custom inline objects", () => {
+    const [block] = lexicalToPortableText(
+      state(paragraph(text("See "), { type: "badge", version: 1, label: "NEW" }, text(" feature"))),
+      {
+        keyGenerator: counterKeys(),
+        rules: [
+          {
+            type: "badge",
+            toPortableText: (node) => ({
+              _type: "badge",
+              label: (node as unknown as { label: string }).label,
+            }),
+          },
+        ],
+      },
+    );
+    expect((block as { children: unknown[] }).children).toEqual([
+      { _type: "span", _key: "k2", text: "See ", marks: [] },
+      { _type: "badge", _key: "k3", label: "NEW" },
+      { _type: "span", _key: "k4", text: " feature", marks: [] },
+    ]);
+  });
+
+  it("preserves format and indent on blocks when options are enabled", () => {
+    const blocks = lexicalToPortableText(
+      state({
+        type: "paragraph",
+        version: 1,
+        format: "center",
+        indent: 3,
+        children: [text("Centered")],
+      }),
+      {
+        keyGenerator: counterKeys(),
+        preserveFormat: true,
+        preserveIndent: true,
+      },
+    );
+    expect(blocks[0]).toMatchObject({
+      style: "normal",
+      format: "center",
+      indent: 3,
+    });
+  });
+
+  it("converts tables to standard portable text table blocks", () => {
+    const [block] = lexicalToPortableText(
+      state({
+        type: "table",
+        version: 1,
+        children: [
+          {
+            type: "tablerow",
+            version: 1,
+            children: [
+              { type: "tablecell", version: 1, children: [text("A1")] },
+              { type: "tablecell", version: 1, children: [text("B1")] },
+            ],
+          },
+        ],
+      }),
+      { keyGenerator: counterKeys() },
+    );
+    expect(block).toEqual({
+      _type: "table",
+      _key: "k1",
+      rows: [
+        {
+          _type: "tableRow",
+          _key: "k2",
+          cells: ["A1", "B1"],
+        },
+      ],
+    });
   });
 });
 

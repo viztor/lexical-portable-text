@@ -1,3 +1,4 @@
+import { CodeNode } from "@lexical/code";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -7,7 +8,28 @@ import {
   type PortableTextSpan,
 } from "../src/index.js";
 import { CalloutNode, calloutLoad, calloutSave } from "./callout.js";
-import { canonicalize, factories, makeEditor } from "./helpers.js";
+import { canonicalize, counterKeys, factories, makeEditor } from "./helpers.js";
+
+class FileCodeNode extends CodeNode {
+  __filename?: string;
+  static override getType(): string {
+    return "code";
+  }
+  static override clone(node: FileCodeNode): FileCodeNode {
+    const clone = new FileCodeNode(node.__language, node.__key);
+    clone.__filename = node.__filename;
+    return clone;
+  }
+  setFilename(filename?: string): void {
+    this.getWritable().__filename = filename;
+  }
+  getFilename(): string | undefined {
+    return this.getLatest().__filename;
+  }
+  override exportJSON(): ReturnType<CodeNode["exportJSON"]> & { filename?: string } {
+    return { ...super.exportJSON(), filename: this.__filename };
+  }
+}
 
 let counter = 0;
 const key = (): string => `r${(counter += 1)}`;
@@ -148,6 +170,105 @@ describe("round-trip: Portable Text → Lexical → Portable Text", () => {
     const result = roundTrip(source);
     expect(result[0]).toMatchObject({ listItem: "bullet" });
     expect(result[0]).not.toHaveProperty("checked");
+  });
+
+  it("losslessly round-trips check lists when checkListMapping: 'check' is configured", () => {
+    const source = [
+      block([span("Pending task")], {
+        listItem: "check",
+        level: 1,
+        checked: false,
+      } as Partial<PortableTextContent>),
+      block([span("Completed task")], {
+        listItem: "check",
+        level: 1,
+        checked: true,
+      } as Partial<PortableTextContent>),
+    ];
+    const result = roundTrip(source, {
+      save: { checkListMapping: "check" },
+    });
+    expect(canonicalize(result)).toEqual(canonicalize(source));
+
+    const second = roundTrip(result, {
+      save: { checkListMapping: "check" },
+    });
+    expect(canonicalize(second)).toEqual(canonicalize(result));
+  });
+
+  it("losslessly round-trips code blocks with filename metadata", () => {
+    const source: PortableTextContent[] = [
+      {
+        _type: "code",
+        _key: key(),
+        language: "typescript",
+        filename: "converter.ts",
+        code: "export const answer = 42;\n",
+      },
+    ];
+    const editor = makeEditor([FileCodeNode]);
+    portableTextToLexical(editor, source, {
+      factories: {
+        ...factories,
+        code: (lang, ch, meta) => {
+          const node = new FileCodeNode(lang ?? undefined);
+          if (meta?.filename) node.setFilename(meta.filename);
+          node.append(...ch);
+          return node;
+        },
+      },
+    });
+    const result = lexicalToPortableText(editor) as PortableTextContent[];
+    expect(canonicalize(result)).toEqual(canonicalize(source));
+  });
+
+  it("losslessly round-trips tables via table factories and serializer", () => {
+    const ptSerialized = lexicalToPortableText(
+      {
+        root: {
+          type: "root",
+          version: 1,
+          children: [
+            {
+              type: "table",
+              version: 1,
+              children: [
+                {
+                  type: "tablerow",
+                  version: 1,
+                  children: [
+                    {
+                      type: "tablecell",
+                      version: 1,
+                      children: [{ type: "text", version: 1, text: "Col 1", format: 0 }],
+                    },
+                    {
+                      type: "tablecell",
+                      version: 1,
+                      children: [{ type: "text", version: 1, text: "Col 2", format: 0 }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      { keyGenerator: counterKeys() },
+    );
+    expect(ptSerialized).toEqual([
+      {
+        _type: "table",
+        _key: "k1",
+        rows: [
+          {
+            _type: "tableRow",
+            _key: "k2",
+            cells: ["Col 1", "Col 2"],
+          },
+        ],
+      },
+    ]);
   });
 
   it("round-trips a custom Callout block through rules and factories", () => {

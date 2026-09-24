@@ -1,4 +1,4 @@
-import { $createParagraphNode, $createTextNode, $getRoot } from "lexical";
+import { $createParagraphNode, $createTextNode, $getRoot, type LexicalNode } from "lexical";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -102,6 +102,63 @@ describe("portableTextToLexical — blocks", () => {
     expect(childAt(editor, 0)).toMatchObject({ type: "quote" });
   });
 
+  it("supports custom block styles via rules", () => {
+    const editor = makeEditor();
+    portableTextToLexical(editor, [textBlock([span("Subtitle text")], { style: "subtitle" })], {
+      factories,
+      rules: [
+        {
+          type: "subtitle",
+          toLexical: (block) => {
+            return factories.heading!("h3", [factories.text(textOf(block), 0)]);
+          },
+        },
+      ],
+    });
+    expect(childAt(editor, 0)).toMatchObject({ type: "heading", tag: "h3" });
+    expect(textOf(childAt(editor, 0))).toBe("Subtitle text");
+  });
+
+  it("supports custom block styles via factories.blockStyle", () => {
+    const editor = makeEditor();
+    portableTextToLexical(editor, [textBlock([span("Lead paragraph")], { style: "lead" })], {
+      factories: {
+        ...factories,
+        blockStyle: (style, children) => {
+          if (style === "lead") {
+            return factories.paragraph(children);
+          }
+          return null;
+        },
+      },
+    });
+    expect(childAt(editor, 0)).toMatchObject({ type: "paragraph" });
+    expect(textOf(childAt(editor, 0))).toBe("Lead paragraph");
+  });
+
+  it("applies format and indent to the Lexical element node", () => {
+    const editor = makeEditor();
+    portableTextToLexical(
+      editor,
+      [
+        {
+          _type: "block",
+          _key: "b1",
+          style: "normal",
+          format: "center",
+          indent: 2,
+          children: [span("Aligned")],
+        } as PortableTextBlock & { format: string; indent: number },
+      ],
+      { factories },
+    );
+    expect(childAt(editor, 0)).toMatchObject({
+      type: "paragraph",
+      format: "center",
+      indent: 2,
+    });
+  });
+
   it("replaces existing content on each call", () => {
     const editor = makeEditor();
     portableTextToLexical(editor, [textBlock([span("first")])], { factories });
@@ -166,6 +223,101 @@ describe("portableTextToLexical — inline", () => {
     );
     expect(textOf(childAt(editor, 0))).toBe("annotated");
     expect(collect(childAt(editor, 0), "text")[0]?.format).toBe(0);
+  });
+
+  it("handles custom mark definitions via annotationRules", () => {
+    const editor = makeEditor();
+    portableTextToLexical(
+      editor,
+      [
+        textBlock([span("commented text", ["c1"])], {
+          markDefs: [{ _type: "comment", _key: "c1", commentId: "c_42" }],
+        }),
+      ],
+      {
+        factories,
+        annotationRules: [
+          {
+            type: "comment",
+            toLexical: (def, children) => {
+              return factories.link!(
+                `comment:${(def as unknown as { commentId: string }).commentId}`,
+                children,
+              );
+            },
+          },
+        ],
+      },
+    );
+    const linkNode = collect(childAt(editor, 0), "link")[0];
+    expect(linkNode).toMatchObject({ type: "link", url: "comment:c_42" });
+    expect(textOf(linkNode)).toBe("commented text");
+  });
+
+  it("handles custom mark definitions via factories.annotation fallback", () => {
+    const editor = makeEditor();
+    portableTextToLexical(
+      editor,
+      [
+        textBlock([span("footnote text", ["fn1"])], {
+          markDefs: [{ _type: "footnote", _key: "fn1", note: "Source: 2024" }],
+        }),
+      ],
+      {
+        factories: {
+          ...factories,
+          annotation: (def, children) => {
+            return factories.link!(
+              `footnote:${(def as unknown as { note: string }).note}`,
+              children,
+            );
+          },
+        },
+      },
+    );
+    const linkNode = collect(childAt(editor, 0), "link")[0];
+    expect(linkNode).toMatchObject({ type: "link", url: "footnote:Source: 2024" });
+  });
+
+  it("forwards link metadata (title, target, rel) to factories.link", () => {
+    const editor = makeEditor();
+    const linkSpy = vi.fn(
+      (
+        url: string,
+        children: LexicalNode[],
+        meta?: { title?: string; target?: string; rel?: string },
+      ) => {
+        return factories.link!(url, children, meta);
+      },
+    );
+    portableTextToLexical(
+      editor,
+      [
+        textBlock([span("link with meta", ["l1"])], {
+          markDefs: [
+            {
+              _type: "link",
+              _key: "l1",
+              href: "https://example.com",
+              title: "Tooltip",
+              target: "_blank",
+              rel: "noopener",
+            },
+          ],
+        }),
+      ],
+      {
+        factories: {
+          ...factories,
+          link: linkSpy,
+        },
+      },
+    );
+    expect(linkSpy).toHaveBeenCalledWith("https://example.com", expect.anything(), {
+      title: "Tooltip",
+      target: "_blank",
+      rel: "noopener",
+    });
   });
 
   it("ignores unknown mark names", () => {
@@ -369,6 +521,34 @@ describe("portableTextToLexical — code", () => {
     expect(textOf(codeNode)).toBe("a\nb\n");
   });
 
+  it("forwards filename to factories.code", () => {
+    const editor = makeEditor();
+    const codeSpy = vi.fn(
+      (lang: string | null, ch: LexicalNode[], meta?: { filename?: string }) => {
+        return factories.code!(lang, ch, meta);
+      },
+    );
+    portableTextToLexical(
+      editor,
+      [
+        {
+          _type: "code",
+          _key: key(),
+          language: "ts",
+          filename: "main.ts",
+          code: "const x = 1;",
+        } as never,
+      ],
+      {
+        factories: {
+          ...factories,
+          code: codeSpy,
+        },
+      },
+    );
+    expect(codeSpy).toHaveBeenCalledWith("ts", expect.anything(), { filename: "main.ts" });
+  });
+
   it("falls back to a paragraph without a code factory and reports it", () => {
     const editor = makeEditor();
     const onMissingFactory = vi.fn();
@@ -469,6 +649,60 @@ describe("portableTextToLexical — object blocks", () => {
       },
     });
     expect(rootChildren(editor)).toHaveLength(2);
+  });
+
+  it("supports rules for inline objects within block children", () => {
+    const editor = makeEditor();
+    portableTextToLexical(
+      editor,
+      [
+        textBlock([
+          span("Hello "),
+          { _type: "mention", _key: key(), handle: "alice" } as never,
+          span("!"),
+        ]),
+      ],
+      {
+        factories,
+        rules: [
+          {
+            type: "mention",
+            toLexical: (block) =>
+              $createTextNode(`@${String((block as { handle?: string }).handle)}`),
+          },
+        ],
+      },
+    );
+    expect(textOf(childAt(editor, 0))).toBe("Hello @alice!");
+  });
+
+  it("builds table nodes from table blocks using table factories", () => {
+    const editor = makeEditor();
+    const tableSpy = vi.fn((rows: LexicalNode[]) => $createParagraphNode().append(...rows));
+    const rowSpy = vi.fn((cells: LexicalNode[]) => $createParagraphNode().append(...cells));
+    const cellSpy = vi.fn((children: LexicalNode[]) => $createParagraphNode().append(...children));
+
+    portableTextToLexical(
+      editor,
+      [
+        {
+          _type: "table",
+          _key: key(),
+          rows: [{ _type: "tableRow", _key: key(), cells: ["Cell 1", "Cell 2"] }],
+        } as never,
+      ],
+      {
+        factories: {
+          ...factories,
+          table: tableSpy,
+          tableRow: rowSpy,
+          tableCell: cellSpy,
+        },
+      },
+    );
+    expect(tableSpy).toHaveBeenCalled();
+    expect(rowSpy).toHaveBeenCalledTimes(1);
+    expect(cellSpy).toHaveBeenCalledTimes(2);
   });
 });
 

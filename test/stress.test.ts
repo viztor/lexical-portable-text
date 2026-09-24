@@ -169,4 +169,60 @@ describe("stress: deep structures", () => {
     );
     expect((blocks[0] as { children: PortableTextSpan[] }).children).toHaveLength(100);
   });
+
+  it("converts and loads a 100-row table with multiple columns", () => {
+    const rows: SerializedLexicalNode[] = Array.from({ length: 100 }, (_, r) => ({
+      type: "tablerow",
+      version: 1,
+      children: [
+        { type: "tablecell", version: 1, children: [text(`Row ${r} Col 1`)] },
+        { type: "tablecell", version: 1, children: [text(`Row ${r} Col 2`)] },
+        { type: "tablecell", version: 1, children: [text(`Row ${r} Col 3`)] },
+      ],
+    }));
+
+    const [block] = lexicalToPortableText(
+      state({
+        type: "table",
+        version: 1,
+        children: rows,
+      }),
+      { keyGenerator: counterKeys() },
+    );
+
+    expect(block).toMatchObject({ _type: "table" });
+    const tableRows = (block as { rows?: unknown[] }).rows;
+    expect(tableRows).toHaveLength(100);
+  });
+
+  it("converts and round-trips 500 checklist items with checkListMapping: 'check'", () => {
+    const items = Array.from({ length: 500 }, (_, index) => ({
+      type: "listitem",
+      version: 1,
+      value: index + 1,
+      checked: index % 2 === 0,
+      children: [text(`Task item ${index}`)],
+    }));
+
+    const blocks = lexicalToPortableText(
+      state({
+        type: "list",
+        version: 1,
+        listType: "check",
+        children: items,
+      }),
+      { keyGenerator: counterKeys(), checkListMapping: "check" },
+    );
+
+    expect(blocks).toHaveLength(500);
+    expect((blocks[0] as { listItem?: string; checked?: boolean }).listItem).toBe("check");
+    expect((blocks[0] as { listItem?: string; checked?: boolean }).checked).toBe(true);
+    expect((blocks[1] as { listItem?: string; checked?: boolean }).checked).toBe(false);
+
+    const editor = makeEditor();
+    portableTextToLexical(editor, blocks, { factories });
+    const listNode = childAt(editor, 0);
+    expect(listNode).toMatchObject({ type: "list", listType: "check" });
+    expect(collect(listNode, "listitem")).toHaveLength(500);
+  });
 });

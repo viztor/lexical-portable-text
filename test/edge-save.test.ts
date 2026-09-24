@@ -12,6 +12,7 @@ import {
   heading,
   horizontalRule,
   link,
+  linkWithMeta,
   linebreak,
   list,
   listItem,
@@ -254,5 +255,112 @@ describe("save — options and rules", () => {
     const snapshot = JSON.stringify(input);
     lexicalToPortableText(input, { keyGenerator: counterKeys() });
     expect(JSON.stringify(input)).toBe(snapshot);
+  });
+
+  it("handles complex autolink URLs with query parameters and hash fragments", () => {
+    const complexUrl = "https://example.com/search?q=test&lang=en#results";
+    const [block] = lexicalToPortableText(
+      state(
+        paragraph({ type: "autolink", version: 1, url: complexUrl, children: [text(complexUrl)] }),
+      ),
+      { keyGenerator: counterKeys() },
+    );
+    expect(block).toMatchObject({
+      markDefs: [{ _type: "link", href: complexUrl }],
+      children: [{ text: complexUrl }],
+    });
+  });
+
+  it("handles links with partial metadata (only target, only rel, only title)", () => {
+    const [block] = lexicalToPortableText(
+      state(
+        paragraph(
+          linkWithMeta("https://a.com", { target: "_blank" }, text("Target only")),
+          text(" "),
+          linkWithMeta("https://b.com", { rel: "nofollow" }, text("Rel only")),
+          text(" "),
+          linkWithMeta("https://c.com", { title: "Title only" }, text("Title only")),
+        ),
+      ),
+      { keyGenerator: counterKeys() },
+    );
+    const defs = (block as { markDefs?: Array<{ target?: string; rel?: string; title?: string }> })
+      .markDefs;
+    expect(defs).toHaveLength(3);
+    expect(defs?.[0]).toMatchObject({ target: "_blank" });
+    expect(defs?.[0]).not.toHaveProperty("rel");
+    expect(defs?.[1]).toMatchObject({ rel: "nofollow" });
+    expect(defs?.[1]).not.toHaveProperty("target");
+    expect(defs?.[2]).toMatchObject({ title: "Title only" });
+  });
+
+  it("handles tables with irregular row cell counts and empty cells", () => {
+    const [block] = lexicalToPortableText(
+      state({
+        type: "table",
+        version: 1,
+        children: [
+          {
+            type: "tablerow",
+            version: 1,
+            children: [
+              { type: "tablecell", version: 1, children: [text("Header 1")] },
+              { type: "tablecell", version: 1, children: [text("Header 2")] },
+              { type: "tablecell", version: 1, children: [text("Header 3")] },
+            ],
+          },
+          {
+            type: "tablerow",
+            version: 1,
+            children: [
+              { type: "tablecell", version: 1, children: [text("Cell 1")] },
+              { type: "tablecell", version: 1, children: [] },
+            ],
+          },
+        ],
+      }),
+      { keyGenerator: counterKeys() },
+    );
+
+    expect(block).toEqual({
+      _type: "table",
+      _key: "k1",
+      rows: [
+        {
+          _type: "tableRow",
+          _key: "k2",
+          cells: ["Header 1", "Header 2", "Header 3"],
+        },
+        {
+          _type: "tableRow",
+          _key: "k3",
+          cells: ["Cell 1", ""],
+        },
+      ],
+    });
+  });
+
+  it("preserves format and indent independently", () => {
+    const stateInput = state({
+      type: "paragraph",
+      version: 1,
+      format: "right",
+      indent: 2,
+      children: [text("Both")],
+    });
+
+    const withFormatOnly = lexicalToPortableText(stateInput, {
+      keyGenerator: counterKeys(),
+      preserveFormat: true,
+    });
+    expect(withFormatOnly[0]).toMatchObject({ format: "right" });
+    expect(withFormatOnly[0]).not.toHaveProperty("indent");
+
+    const withIndentOnly = lexicalToPortableText(stateInput, {
+      keyGenerator: counterKeys(),
+      preserveIndent: true,
+    });
+    expect(withIndentOnly[0]).toMatchObject({ indent: 2 });
+    expect(withIndentOnly[0]).not.toHaveProperty("format");
   });
 });

@@ -2,7 +2,7 @@ import { $createCodeNode } from "@lexical/code";
 import { $createLinkNode } from "@lexical/link";
 import { $createListItemNode, $createListNode } from "@lexical/list";
 import { $createHeadingNode } from "@lexical/rich-text";
-import { $createTextNode } from "lexical";
+import { $createTextNode, type LexicalNode } from "lexical";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -313,6 +313,95 @@ describe("load — objects and rules", () => {
       { factories },
     );
     expect(collect(childAt(editor, 0), "link")[0]).toMatchObject({ url: "" });
+  });
+
+  it("handles link metadata with empty strings or special characters safely", () => {
+    const editor = makeEditor();
+    const metaCaptures: Array<{ title?: string; target?: string; rel?: string }> = [];
+    portableTextToLexical(
+      editor,
+      [
+        textBlock([span("x", ["l1"])], {
+          markDefs: [
+            {
+              _type: "link",
+              _key: "l1",
+              href: "https://example.com/path?q=1&b=2#sec",
+              title: "Quotes \"and\" 'apostrophes'",
+              target: "_blank",
+              rel: "noopener noreferrer",
+            },
+          ],
+        }),
+      ],
+      {
+        factories: {
+          ...factories,
+          link: (url, children, meta) => {
+            if (meta) metaCaptures.push(meta);
+            return factories.link!(url, children, meta);
+          },
+        },
+      },
+    );
+    expect(metaCaptures[0]).toEqual({
+      title: "Quotes \"and\" 'apostrophes'",
+      target: "_blank",
+      rel: "noopener noreferrer",
+    });
+    const linkNode = collect(childAt(editor, 0), "link")[0];
+    expect(linkNode).toMatchObject({
+      url: "https://example.com/path?q=1&b=2#sec",
+      title: "Quotes \"and\" 'apostrophes'",
+    });
+  });
+
+  it("handles checklist items with non-boolean or missing checked property gracefully", () => {
+    const editor = makeEditor();
+    portableTextToLexical(
+      editor,
+      [
+        textBlock([span("No checked prop")], { listItem: "check", level: 1 }),
+        textBlock([span("String checked prop")], {
+          listItem: "check",
+          level: 1,
+          checked: "true",
+        } as never),
+      ],
+      { factories },
+    );
+    const items = collect(childAt(editor, 0), "listitem");
+    expect(items).toHaveLength(2);
+    // Non-boolean and missing checked properties default safely to false
+    expect(items[0]).toMatchObject({ checked: false });
+    expect(items[1]).toMatchObject({ checked: false });
+  });
+
+  it("handles table blocks with empty rows or empty cell lists", () => {
+    const editor = makeEditor();
+    const tableSpy = vi.fn((rows: LexicalNode[]) => factories.paragraph(rows));
+    portableTextToLexical(
+      editor,
+      [
+        {
+          _type: "table",
+          _key: key(),
+          rows: [],
+        } as never,
+        {
+          _type: "table",
+          _key: key(),
+          rows: [{ _type: "tableRow", _key: key(), cells: [] }],
+        } as never,
+      ],
+      {
+        factories: {
+          ...factories,
+          table: tableSpy,
+        },
+      },
+    );
+    expect(tableSpy).toHaveBeenCalledTimes(2);
   });
 
   it("does not mutate the input blocks", () => {

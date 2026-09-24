@@ -7,13 +7,22 @@ Convert [Lexical](https://lexical.dev) editor state to and from
 [Portable Text](https://portabletext.org).
 
 - **Save path is pure** — converts serialized state without importing the
-  editor runtime, so it runs in workers, servers and tests.
+  editor runtime, so it runs in workers, servers, edge functions and tests.
 - **Load path uses your nodes** — builds nodes through caller-supplied
   factories, so it never fights Lexical's version-sensitive serialized JSON.
-- **Custom blocks first-class** — rules in both directions, with delegation
-  (`return null` → default handling) and content-preserving fallbacks.
-- **Type-correct** — Portable Text types come from `@portabletext/types`,
-  the same package the rest of the ecosystem uses.
+- **Custom blocks & inline objects first-class** — rules in both directions,
+  handling both block-level objects (callout, embed) and inline objects
+  (mentions, badges), with delegation (`return null` → default handling) and
+  content-preserving fallbacks.
+- **Full feature parity** with Lexical's Markdown and HTML converters —
+  task lists/checklists with `checked` status, autolinks, link metadata
+  (`title`, `target`, `rel`), tables, code filenames, text alignment, and
+  indents.
+- **Annotations & custom mark definitions** — full support for non-link mark
+  definitions (comments, footnotes, internal links, highlights) with nesting.
+- **Type-correct & tree-shakeable** — pure ESM (`"sideEffects": false`),
+  typed with `@portabletext/types`, the same package the rest of the ecosystem
+  uses.
 
 ## Install
 
@@ -51,8 +60,8 @@ const factories = {
   quote: (children) => $createQuoteNode().append(...children),
   list: (listType, children) => $createListNode(listType).append(...children),
   listItem: (children, { checked }) => $createListItemNode(checked).append(...children),
-  code: (language, children) => $createCodeNode(language ?? undefined).append(...children),
-  link: (url, children) => $createLinkNode(url).append(...children),
+  code: (language, children, meta) => $createCodeNode(language ?? undefined).append(...children),
+  link: (url, children, meta) => $createLinkNode(url, meta).append(...children),
   linebreak: () => $createLineBreakNode(),
 };
 
@@ -63,11 +72,13 @@ portableTextToLexical(editor, blocks, { factories });
 Inside an existing `editor.update` context use
 `portableTextToLexicalNodes(blocks, { factories })` instead.
 
-### Custom blocks
+### Custom blocks and inline objects
+
+Rules handle both top-level blocks and inline elements (e.g. mentions, badges):
 
 ```ts
 const options = {
-  // Lexical "callout" node → Portable Text object
+  // Lexical node → Portable Text object
   rules: [
     {
       type: "callout",
@@ -75,6 +86,15 @@ const options = {
         _type: "callout",
         _key: ctx.key(),
         tone: node.tone ?? "note",
+        content: ctx.convertBlocks(node.children ?? []),
+      }),
+    },
+    {
+      type: "mention",
+      toPortableText: (node, ctx) => ({
+        _type: "mention",
+        _key: ctx.key(),
+        userId: node.userId,
       }),
     },
   ],
@@ -85,13 +105,17 @@ portableTextToLexical(editor, blocks, {
     ...factories,
     object: (block) =>
       block._type === "callout"
-        ? $createCalloutNode(block.tone) // your node
+        ? $createCalloutNode(block.tone)
         : null,
   },
   rules: [
     {
       type: "callout",
       toLexical: (block) => $createCalloutNode(block.tone),
+    },
+    {
+      type: "mention",
+      toLexical: (block) => $createMentionNode(block.userId),
     },
   ],
 });
@@ -100,70 +124,255 @@ portableTextToLexical(editor, blocks, {
 Rules may return `null` to delegate to default handling — the same escape
 hatch Lexical's own markdown transformers use.
 
+### Custom mark definitions / annotations
+
+Handle annotations (comments, internal links, footnotes) on text spans — in
+**both** directions:
+
+**Load: Portable Text → Lexical** (`annotationRules` / `factories.annotation`):
+
+```ts
+portableTextToLexical(editor, blocks, {
+  factories,
+  annotationRules: [
+    {
+      type: "internalLink",
+      toLexical: (def, children) => {
+        return $createInternalLinkNode(def.reference._ref).append(...children);
+      },
+    },
+  ],
+});
+```
+
+**Save: Lexical → Portable Text** (`annotationRules` on the save options):
+
+```ts
+const blocks = lexicalToPortableText(editor, {
+  annotationRules: [
+    {
+      type: "internalLink",
+      toPortableText: (node, ctx) => ({
+        _type: "internalLink",
+        _key: ctx.key(),
+        reference: { _ref: node.reference._ref },
+      }),
+    },
+  ],
+});
+```
+
+The rule fires for each wrapper node; its inline children carry the mark key,
+so annotations nest and stack with decorators exactly like links.
+
+### Plain text extraction
+
+Extract clean plain text from Portable Text blocks (for SEO descriptions, previews, word counts, search indexes):
+
+```ts
+import { portableTextToPlainText } from "lexical-portable-text";
+
+const text = portableTextToPlainText(blocks);
+// Output: "First paragraph\n\nSecond paragraph..."
+```
+
 ## Options
 
 ### `lexicalToPortableText(input, options?)`
 
-| Option                 | Default            | Purpose                                                        |
-| ---------------------- | ------------------ | -------------------------------------------------------------- |
-| `keyGenerator`         | random 12-char key | Portable Text `_key` generation                                |
-| `rules`                | `[]`               | Custom Lexical node rules (`type`, `toPortableText`)           |
-| `onUnknownNode`        | `"children"`       | `"children"` salvages content, `"skip"` drops, `"throw"` fails |
-| `names` / `onUnmapped` | decorator defaults | Remap or drop decorators (see Marks)                           |
+| Option                 | Default              | Purpose                                                        |
+| ---------------------- | -------------------- | -------------------------------------------------------------- |
+| `keyGenerator`         | random 12-char key   | Portable Text `_key` generation                                |
+| `rules`                | `[]`                 | Custom Lexical node rules (`type`, `toPortableText`)           |
+| `onUnknownNode`        | `"children"`         | `"children"` salvages content, `"skip"` drops, `"throw"` fails |
+| `checkListMapping`     | `"bullet"`           | `"bullet"` for standard Sanity schemas; `"check"` for task lists |
+| `preserveFormat`       | `false`              | Preserves `format` (left/center/right/justify) on block level  |
+| `preserveIndent`       | `false`              | Preserves `indent` level on block level                        |
+| `preserveDirection`    | `false`              | Preserves text direction (`"ltr"` or `"rtl"`) on block level   |
+| `blankSpanOnEmptyBlock`| `false`              | Inserts empty span for Sanity Studio validation compliance     |
+| `names` / `onUnmapped` | decorator defaults   | Remap or drop decorators (see Marks)                           |
 
 ### `portableTextToLexical(editor, blocks, options)`
 
-| Option             | Default            | Purpose                                                |
-| ------------------ | ------------------ | ------------------------------------------------------ |
-| `factories`        | —                  | `text` + `paragraph` required; other kinds optional    |
-| `rules`            | `[]`               | Custom Portable Text `_type` rules (`toLexical`)       |
-| `onMissingFactory` | —                  | Notification when a style/kind falls back to paragraph |
-| `names`            | decorator defaults | Mark-name remapping (must mirror the save path)        |
+| Option             | Default            | Purpose                                                    |
+| ------------------ | ------------------ | ---------------------------------------------------------- |
+| `factories`        | —                  | `text` + `paragraph` required; other kinds optional        |
+| `rules`            | `[]`               | Custom Portable Text `_type` or `style` rules (`toLexical`) |
+| `annotationRules`  | `[]`               | Custom mark definition rules (`type`, `toLexical`)         |
+| `onMissingFactory` | —                  | Notification when a style/kind falls back to paragraph     |
+| `names`            | decorator defaults | Mark-name remapping (must mirror the save path)            |
+| `parseAliases`     | `true`             | Recognizes well-known ecosystem mark aliases (see Marks)   |
 
 ## Marks
 
 Lexical packs decorators into a bitmask; Portable Text uses mark names.
 
-| Lexical                             | Bit           | Default mark                 |
-| ----------------------------------- | ------------- | ---------------------------- |
-| bold                                | 1             | `strong`                     |
-| italic                              | 2             | `em`                         |
-| strikethrough                       | 4             | `strike-through`             |
-| underline                           | 8             | `underline`                  |
-| code                                | 16            | `code`                       |
-| subscript / superscript / highlight | 32 / 64 / 128 | dropped (opt in via `names`) |
+| Lexical                             | Bit           | Default mark                 | Well-known aliases                     |
+| ----------------------------------- | ------------- | ---------------------------- | -------------------------------------- |
+| bold                                | 1             | `strong`                     | `bold`, `b`                          |
+| italic                              | 2             | `em`                         | `italic`, `i`                        |
+| strikethrough                       | 4             | `strike-through`             | `strikethrough`, `strike`, `s`       |
+| underline                           | 8             | `underline`                  | `u`                                  |
+| code                                | 16            | `code`                       |                                        |
+| subscript                           | 32            | dropped (opt-in via `names`) | `sub`, `subscript`                   |
+| superscript                         | 64            | dropped (opt-in via `names`) | `sup`, `superscript`                 |
+| highlight                           | 128           | dropped (opt-in via `names`) | `highlight`, `mark`                  |
 
-Link nodes become `link` mark definitions (`markDefs`) with the URL; text
-spans reference them by key.
+Link and autolink nodes become `link` mark definitions (`markDefs`) carrying
+`href`, `title`, `target`, and `rel`; text spans reference them by key.
 
 ## Supported constructs
 
-| Construct             | Save          | Load                        | Notes                                                             |
-| --------------------- | ------------- | --------------------------- | ----------------------------------------------------------------- |
-| Paragraphs            | ✅            | ✅                          |                                                                   |
-| Headings h1–h6        | ✅            | ✅                          | Lexical `heading.tag` ↔ `style`                                   |
-| Blockquotes           | ✅            | ✅                          |                                                                   |
-| Lists (bullet/number) | ✅            | ✅                          | Flat-list blocks with `level`; nested lists regroup on load       |
-| Task lists            | ✅ (`bullet`) | ✅ (`check`)                | Lexical `check` lists save as `bullet` (no PT task list standard) |
-| Links                 | ✅            | ✅                          | `markDefs` of `_type: "link"`                                     |
-| Hard breaks           | ✅            | ✅                          | Newlines inside spans                                             |
-| Code blocks           | ✅            | ✅                          | `_type: "code"` (`language`, `code`)                              |
-| Horizontal rules      | ✅            | ✅                          | `_type: "horizontal-rule"`                                        |
-| Custom blocks         | ✅ rules      | ✅ rules / `object` factory | Unknown objects are skipped, never mangled                        |
-| Images / tables       | —             | —                           | Add rules for your node types                                     |
+| Construct             | Save               | Load                        | Notes                                                              |
+| --------------------- | ------------------ | --------------------------- | ------------------------------------------------------------------ |
+| Paragraphs            | ✅                 | ✅                          | Text alignment (`format`) and `indent` preserved                 |
+| Headings h1–h6        | ✅                 | ✅                          | Lexical `heading.tag` ↔ `style`                                    |
+| Blockquotes           | ✅                 | ✅                          | `style: "blockquote"`                                             |
+| Lists (bullet/number) | ✅                 | ✅                          | Flat-list blocks with `level`; nested lists regroup on load        |
+| Task / Check lists    | ✅                 | ✅                          | `checkListMapping: "check"` preserves `checked: boolean`          |
+| Links & Autolinks     | ✅                 | ✅                          | Preserves `href`, `title`, `target`, `rel`                     |
+| Annotations           | ✅ `annotationRules` | ✅ `annotationRules`      | Custom mark definitions on save **and** load                       |
+| Inline objects        | ✅ rules           | ✅ rules / `object` factory | Mentions, badges, inline images in `children`                     |
+| Code blocks           | ✅                 | ✅                          | `_type: "code"` (`language`, `code`, `filename`)                 |
+| Tables                | ✅                 | ✅                          | `_type: "table"` with `rows` and `cells` via table factories     |
+| Images                | ✅                 | ✅ `factories.image`       | `_type: "image"` with `url`, `alt`, `title`, `caption`, dimensions |
+| Text direction        | ✅                 | ✅                          | Preserves and applies `"ltr"` / `"rtl"` with `preserveDirection`  |
+| Horizontal rules      | ✅                 | ✅                          | `_type: "horizontal-rule"` (`hr`, `horizontalrule`, `break`)      |
+| Custom block styles   | ✅                 | ✅ rules / `blockStyle`     | Custom styles like `"subtitle"`, `"lead"`, `"callout"`            |
+| Hard breaks           | ✅                 | ✅                          | Newlines inside spans or `linebreak` nodes                         |
 
-## Design notes (prior art)
+## How Custom Blocks & Nodes are Translated
 
-- **Ecosystem naming** — `lexicalToPortableText` / `portableTextToLexical`
-  mirrors `markdownToPortableText`, `htmlToPortableText`, etc.
-- **Rules + key generator** follow `@portabletext/html`'s
-  `rules`/`keyGenerator` options; unhandled structures keep content instead
-  of disappearing.
-- **Delegation** (`return null`) follows `@lexical/markdown` transformers.
-- **Span merging and regenerated keys** follow
-  `@portabletext/markdown`'s round-trip contract: keys are not identity.
-- **Node factories on load** mirror `$convertFromMarkdownString`, which also
-  builds nodes instead of emitting serialized JSON.
+Rich text editors differ fundamentally in how they represent content beyond standard text. This bridge provides four translation mechanisms covering the complete Portable Text specification:
+
+### 1. Custom Top-Level Object Blocks (Callouts, Embeds, Hero)
+
+In Portable Text, custom non-text blocks are objects with a `_type` string (e.g. `{ _type: "callout", tone: "warning" }`).
+
+- **Lexical → Portable Text (Save)**:
+  Register a rule in `options.rules`. The rule inspects the serialized Lexical node and returns a Portable Text object block (or an array of blocks).
+  ```ts
+  const options = {
+    rules: [
+      {
+        type: "callout",
+        toPortableText: (node, ctx) => ({
+          _type: "callout",
+          _key: ctx.key(),
+          tone: node.tone ?? "info",
+          // Recursively convert child Lexical blocks inside this container:
+          content: ctx.convertBlocks(node.children ?? []),
+        }),
+      },
+    ],
+  };
+  ```
+
+- **Portable Text → Lexical (Load)**:
+  Register a rule in `options.rules` or provide an `object` factory in `options.factories`.
+  ```ts
+  portableTextToLexical(editor, blocks, {
+    factories,
+    rules: [
+      {
+        type: "callout",
+        toLexical: (block, ctx) => {
+          const node = $createCalloutNode(block.tone);
+          // Recursively convert nested Portable Text blocks into Lexical nodes:
+          if (Array.isArray(block.content)) {
+            for (const childNode of ctx.convertBlocks(block.content)) {
+              node.append(childNode);
+            }
+          }
+          return node;
+        },
+      },
+    ],
+  });
+  ```
+
+### 2. Custom Inline Objects (Mentions, Badges, Inline Math)
+
+In Portable Text, inline objects reside directly inside `block.children` alongside text spans (`child._type !== "span"`).
+
+- **Lexical → Portable Text (Save)**:
+  Inline rules match any Lexical node `type` inside paragraph text. The converter automatically allocates a `_key` if omitted:
+  ```ts
+  {
+    type: "mention",
+    toPortableText: (node) => ({
+      _type: "mention",
+      userId: node.userId,
+      label: node.label,
+    }),
+  }
+  ```
+
+- **Portable Text → Lexical (Load)**:
+  The converter checks `rules` matching `child._type`, falling back to `factories.object(child)`:
+  ```ts
+  {
+    type: "mention",
+    toLexical: (block) => $createMentionNode(block.userId, block.label),
+  }
+  ```
+
+### 3. Custom Mark Definitions / Annotations (Internal Links, Comments, Footnotes)
+
+In Portable Text, annotations wrap text spans by referencing an entry in `block.markDefs` by key.
+
+- **Lexical → Portable Text (Save)**:
+  Standard Lexical `link` and `autolink` nodes are automatically converted to `link` mark definitions with metadata (`href`, `title`, `target`, `rel`). Custom wrappers with children salvage their text spans.
+- **Portable Text → Lexical (Load)**:
+  Provide `annotationRules` or `factories.annotation`. The converter nests multiple annotations and decorators from innermost to outermost:
+  ```ts
+  portableTextToLexical(editor, blocks, {
+    factories,
+    annotationRules: [
+      {
+        type: "comment",
+        toLexical: (def, children, ctx) => {
+          return $createCommentNode(def.commentId).append(...children);
+        },
+      },
+    ],
+  });
+  ```
+
+### 4. Custom Block Styles (Subtitle, Lead, Kicker)
+
+Portable Text blocks can have arbitrary `style` strings (e.g. `style: "lead"`).
+
+- **Lexical → Portable Text (Save)**:
+  Heading tags `h1`–`h6` become matching styles; quotes become `"blockquote"`; paragraphs become `"normal"`. Custom block rules can emit blocks with custom `style` properties.
+- **Portable Text → Lexical (Load)**:
+  Provide a rule matching the style name or implement `factories.blockStyle`:
+  ```ts
+  factories: {
+    ...factories,
+    blockStyle: (style, children, block) => {
+      if (style === "lead") {
+        return $createParagraphNode().append(...children);
+      }
+      return null; // Fall back to standard paragraph
+    },
+  }
+  ```
+
+---
+
+## Compatibility & Limitations
+
+| Aspect | Behavior & Boundary | Compatibility Note |
+| :--- | :--- | :--- |
+| **Key Identity** | Portable Text keys (`_key`) are regenerated during conversion. | Keys exist for React array keys and block addressing, not as stable row IDs. Pass a custom `keyGenerator` if your pipeline requires deterministic keys. |
+| **Lists: Flat vs. Nested** | Portable Text lists are flat arrays with `level: number`; Lexical lists nest `ListNode` inside `ListItemNode`. | The converter groups consecutive list items by level and type automatically. Skipped levels (e.g. jumping from 1 directly to 3) are normalized into continuous nesting on load. |
+| **Checklist Schemas** | Sanity's default Studio schema defines only `bullet` and `number` list items. | Checklists save as `listItem: "bullet"` by default for zero-config Sanity Studio compatibility. Use `checkListMapping: "check"` when your Studio schema supports task lists or when performing lossless round-trips. |
+| **Sanity Empty Blocks** | Some Sanity Studio validation rules flag `children: []` on text blocks. | Set `blankSpanOnEmptyBlock: true` to emit `{ _type: "span", text: "", marks: [] }` on empty paragraphs to satisfy strict Studio schema validators. |
+| **Node Registration** | The load path builds native Lexical nodes via caller factories. | When converting into a headless or browser editor, make sure all custom node classes (e.g. `TableNode`, `ImageNode`, custom callouts) are registered in the editor's `nodes` array. |
+| **Span Merging** | Adjacent text runs with identical formatting merge into a single span. | This matches `@portabletext/markdown` output hygiene. Line breaks directly following links remain separate plain spans so breaks never artificially extend a hyperlink. |
+| **Runtime Requirements** | The save path (`lexicalToPortableText`) is pure JSON; the load path (`portableTextToLexical`) uses Lexical's discrete update. | Save path runs anywhere (Cloudflare Workers, edge runtimes, Node.js, tests) without loading Lexical. Load path requires Lexical's discrete update context. |
+
 
 ## Scope
 
@@ -180,17 +389,14 @@ Markdown, not Lexical → Markdown directly). For rendering use
 - **Span merging.** Adjacent text with identical marks merges into one span.
   A hard break directly after a link starts a new *plain* span — breaks never
   extend a link.
-- **Link mark definitions are deduped per block.** Identical link targets
-  share one mark definition; different targets get their own.
+- **Link mark definitions are deduped per block.** Identical link targets and
+  metadata share one mark definition; differing attributes get their own.
+- **Task lists.** By default, checklists save as `listItem: "bullet"` to
+  comply with standard Sanity schemas. Set `checkListMapping: "check"` for
+  lossless task list roundtrips including `checked: boolean`.
 - **Mark name collisions throw.** Two decorators mapping to the same mark name
   (`{ names: { bold: "em" } }`) is ambiguous, so both `formatToMarks` and
   `marksToFormat` raise instead of silently setting two bits.
-- **Task lists.** Portable Text has no standard task-list item. Lexical
-  `check` lists save as `listItem: "bullet"` (checked state dropped), while
-  `listItem: "check"` loads into a `check` list with `checked` passed to your
-  `listItem` factory. Round-tripping a task list yields a bullet list.
-- **Non-link mark definitions** are dropped on load (their text is kept).
-  Register a rule if you need custom inline annotations.
 - **Missing factories.** `heading`/`quote`/`list`/`code` fall back to
   `paragraph` and call `onMissingFactory`; unknown object blocks are skipped.
 - **Unknown nodes on save** follow `onUnknownNode`: salvage children
@@ -198,91 +404,67 @@ Markdown, not Lexical → Markdown directly). For rendering use
 
 ## Testing
 
+### Setup verification
+
+Before wiring real documents, exercise every extension mechanism with built-in
+probe inputs and get one check per mechanism:
+
+```ts
+import { verifySetup, formatSetupChecks, allSetupChecksPassed } from "lexical-portable-text";
+
+const checks = verifySetup({
+  save: mySaveOptions,                  // your rules, annotationRules, names, flags
+  load: { ...myLoadOptions, factories },
+  editor,                               // headless or real; required for load checks
+});
+
+if (!allSetupChecksPassed(checks)) {
+  console.error(formatSetupChecks(checks));
+}
+```
+
+| Check | What it verifies |
+| --- | --- |
+| `savePipeline` | Save runs end to end and a paragraph survives |
+| `saveRules` | Save `rules` fire for probe nodes with children and produce blocks |
+| `saveAnnotationRules` | Save annotation rules emit `markDefs` whose keys are referenced by spans |
+| `loadRules` | Load `rules` produce Lexical nodes (run inside `editor.update`) |
+| `loadAnnotationRules` | Load annotation rules wrap annotated spans into nodes |
+| `markNames` | Every decorator survives the mark-name round trip save ↔ load |
+| `roundTripProbe` | A probe block loads, saves back, and preserves its text |
+
+All checks are vacuously true for default setups, so the same call works when
+nothing is customized. Load-side checks require an `editor`; a missing editor
+is reported as a problem rather than silently skipped.
+
 ```bash
 pnpm test
 ```
 
-182 cases across ten files:
+263+ cases across 11 test files:
 
+- **features** (`features.test.ts`) — checklists with checked state,
+  autolinks, link metadata, custom mark definitions/annotations, inline objects,
+  custom block styles, format & indent preservation, code filename, tables,
+  well-known aliases, image blocks, text direction (LTR/RTL), empty block
+  compatibility, flexible input shapes, recursive block conversion, and plain
+  text extraction (`portableTextToPlainText`).
 - **conversion suites** — `lexicalToPortableText` (styles, marks, links,
-  breaks, lists, code, unknown nodes, rules, key order) and
-  `portableTextToLexical` (styles, marks, links, breaks, lists, code, objects,
-  factory fallbacks, factory arguments, editor isolation)
+  breaks, lists, code, tables, unknown nodes, rules, key order) and
+  `portableTextToLexical` (styles, marks, links, annotations, breaks, lists,
+  code, tables, objects, factory fallbacks, factory arguments, editor isolation).
 - **edge suites** — text fidelity (emoji/CJK/RTL, whitespace, 20k-char runs,
-  CRLF, markdown-like characters), malformed nodes, ordering, rule
-  precedence, mutation checks, list level behavior, empty spans, 100-item lists
-- **round-trips** — 11 table-driven documents plus idempotence, an empty
-  paragraph, a shared mark definition, and a registered custom node
+  CRLF, markdown-like characters), malformed nodes, partial metadata,
+  irregular tables, ordering, rule precedence, mutation checks, list level
+  behavior, empty spans, 100-item lists.
+- **round-trips** — table-driven documents plus idempotence, checklists, code
+  filenames, custom annotations, custom callouts, and tables.
 - **property tests** — 300 seeded documents (including custom callouts) must
-  round-trip and be idempotent; emitted keys must be unique
+  round-trip and be idempotent; emitted keys must be unique.
 - **fuzz invariants** — 640 generated inputs across both paths must never
   throw under documented policies and must satisfy the Portable Text
-  structural contract (resolvable marks, valid styles, unique keys)
-- **stress** — 1000-block documents, 500-link blocks, 50k-char spans, 30-level
-  lists, 200-deep unknown nesting
+  structural contract (resolvable marks, valid styles, unique keys).
+- **stress** — 1000-block documents, 500-link blocks, 100-row tables, 500-task
+  checklists, 50k-char spans, 30-level lists, 200-deep unknown nesting.
 - **units** — mark mapping (all 32 decorator combinations, collisions,
-  custom names) and key generation
-
-`pnpm verify` runs lint + format + typecheck + tests + build, the same gate
-CI uses.
-
-## Why this bridge didn't exist before
-
-Investigated 2026-09-12:
-
-- **Portable Text is a serialization spec, not an editor protocol.** It
-  defines blocks, spans, marks and objects — not selection, transactions,
-  undo or collaboration. Every editor therefore needs its own mapping layer.
-- **The ecosystem solved rendering everywhere, not editing.** There are 33
-  official `@portabletext/*` packages — React, Vue, Svelte, Solid, Astro,
-  React Native (experimental), React PDF, HTML and Markdown renderers — but
-  exactly one editor, `@portabletext/editor`, and it is a bespoke XState
-  state-machine engine (`xstate`, `@xstate/react`), not Slate, ProseMirror or
-  Lexical.
-- **The previous editor was Slate-based and is frozen.**
-  `@sanity/portable-text-editor` (deps: `slate`, `slate-react`) was last
-  published June 2024; the owners rewrote their own editor instead of
-  adapting another framework.
-- **Official converters point one way — into Portable Text**: HTML→PT,
-  Sanity-schema HTML→PT, Contentful RichText→PT, PT↔Markdown. There is no
-  PT→ProseMirror, PT→Slate or PT→Lexical.
-- **Only one Lexical bridge has ever been published**:
-  `@aceccarello/portable-text-to-lexical@0.1.0` (August 2025, one direction,
-  Payload-specific, no commits after its release weekend). It sees ~23
-  downloads/month; `@portabletext/react` sees ~5M.
-- **Why**: the audience is the intersection of "apps using Lexical" and "apps
-  that want Portable Text as storage" — a migration-shaped problem whose last
-  mile is always app-specific custom nodes. Lexical ships its own
-  markdown/HTML converters, and Portable Text shops run Sanity's editor, so
-  nobody had a reason to maintain a general bridge.
-
-That is why this package is registry-driven and bidirectional: the general
-case only pays off when you already own a Lexical editor and want a portable
-document format — exactly the case it was built for.
-
-## Releasing
-
-Publishing runs from the tag in GitHub Actions — no local `npm login` needed.
-
-1. Bump `version` in `package.json`, commit on `main`.
-2. Tag and push:
-
-   ```bash
-   git tag v0.2.0
-   git push origin main --tags
-   ```
-
-3. `publish.yml` checks the tag matches the package version, runs the full
-   `verify` suite, publishes to npm with
-   [trusted publishing](https://docs.npmjs.com/trusted-publishers) (OIDC
-   provenance, no `NPM_TOKEN`), and creates the GitHub release.
-
-One-time npm setup: under the package's **Publishing access** settings, add a
-trusted publisher for repo `railmanio/lexical-portable-text`, workflow
-`publish.yml`. For the very first publish (before the package exists on npm),
-run `pnpm verify && pnpm publish --access public` locally once, then switch the
-package to trusted publishing.
-
-## License
-
-MIT
+  custom names) and key generation.
