@@ -169,8 +169,12 @@ Key properties:
 - **Annotations vs blocks** are distinguished with `annotation: true`, which
   routes the `load` half's `def, children` signature correctly.
 - **Base options merge**: your own hand-written rules, mark names, key
-  generator, and `preserve*` flags are preserved and applied in addition to the
-  generated rules.
+  generator, and `preserve*` flags are preserved — a hand rule with the same
+  `type` overrides the bundled half (later-wins), and duplicate definition
+  types inside one array are flagged in `issues`.
+- **`verify()` always completes**: without factories it returns a failing
+  `factoriesProvided` check instead of silently skipping load probes, and any
+  one-sided definitions are surfaced as an `issues` check.
 - **`verify()` reuses the probe system** below — one call validates the entire
   custom pipeline against the real probe document set.
 
@@ -491,7 +495,7 @@ is reported as a problem rather than silently skipped.
 pnpm test
 ```
 
-287 cases across 13 test files:
+298 cases across 14 test files:
 
 - **features** (`features.test.ts`) — checklists with checked state,
   autolinks, link metadata, custom mark definitions/annotations, inline objects,

@@ -155,8 +155,17 @@ export function definePipeline(
   const loadRules: PortableTextToLexicalRule[] = [];
   const loadAnnotationRules: PortableTextToLexicalAnnotationRule[] = [];
 
+  const seenTypes = new Set<string>();
   for (const def of definitions) {
     const annotation = isAnnotationDefinition(def);
+    if (seenTypes.has(def.type)) {
+      issues.push({
+        type: def.type,
+        direction: "save",
+        message: `duplicate definition for "${def.type}"; the later definition wins`,
+      });
+    }
+    seenTypes.add(def.type);
 
     if (def.save) {
       const handler = def.save as CustomBlockSaveHandler<
@@ -217,21 +226,57 @@ export function definePipeline(
 
   const saveOptions: ConverterOptions = {
     ...baseSave,
-    rules: [...(baseSave.rules ?? []), ...saveRules],
-    annotationRules: [...(baseSave.annotationRules ?? []), ...saveAnnotationRules],
+    rules: [...saveRules, ...(baseSave.rules ?? [])],
+    annotationRules: [...saveAnnotationRules, ...(baseSave.annotationRules ?? [])],
   };
 
+  const verifiesLoad = loadRules.length > 0 || loadAnnotationRules.length > 0;
+
   const verify = (editor?: LexicalEditor): SetupCheck[] => {
-    if (!options.factories) return verifySetup({ save: saveOptions, editor });
-    return verifySetup({
+    if (!options.factories) {
+      const noFactoryChecks: SetupCheck[] = [
+        {
+          name: "factoriesProvided",
+          ok: false,
+          problems: verifiesLoad
+            ? [
+                "pipeline declares load() halves but no factories were provided; load-side probes were not run.",
+              ]
+            : ["no factories provided; load-side probes were not run (no load halves declared)."],
+        },
+      ];
+      if (issues.length > 0) {
+        noFactoryChecks.push({
+          name: "issues",
+          ok: false,
+          problems: issues.map((issue) => `[${issue.direction}] ${issue.message}`),
+        });
+      }
+      return noFactoryChecks;
+    }
+    const baseChecks = verifySetup({
       save: saveOptions,
-      load: {
-        factories: options.factories,
-        ...(baseLoad as Omit<PortableTextToLexicalOptions, "factories">),
-      },
+      load: loadOptionsOptions(options.factories),
       editor,
     });
+    if (issues.length > 0) {
+      baseChecks.push({
+        name: "issues",
+        ok: false,
+        problems: issues.map((issue) => `[${issue.direction}] ${issue.message}`),
+      });
+    }
+    return baseChecks;
   };
+
+  function loadOptionsOptions(factories: PortableTextToLexicalOptions["factories"]) {
+    return {
+      ...baseLoad,
+      factories,
+      rules: [...loadRules, ...(baseLoad.rules ?? [])],
+      annotationRules: [...loadAnnotationRules, ...(baseLoad.annotationRules ?? [])],
+    };
+  }
 
   return {
     definitions,
@@ -239,8 +284,8 @@ export function definePipeline(
     loadOptions: (factories) => ({
       ...baseLoad,
       factories,
-      rules: [...(baseLoad.rules ?? []), ...loadRules],
-      annotationRules: [...(baseLoad.annotationRules ?? []), ...loadAnnotationRules],
+      rules: [...loadRules, ...(baseLoad.rules ?? [])],
+      annotationRules: [...loadAnnotationRules, ...(baseLoad.annotationRules ?? [])],
     }),
     issues,
     verify,
