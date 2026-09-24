@@ -49,15 +49,15 @@
     "@portabletext/types": "^4.0.2"
   },
   "devDependencies": {
-    "@lexical/code": "0.50.0",
-    "@lexical/headless": "0.50.0",
-    "@lexical/link": "0.50.0",
-    "@lexical/list": "0.50.0",
-    "@lexical/rich-text": "0.50.0",
+    "@lexical/code": "0.51.0",
+    "@lexical/headless": "0.51.0",
+    "@lexical/link": "0.51.0",
+    "@lexical/list": "0.51.0",
+    "@lexical/rich-text": "0.51.0",
     "@types/node": "^26.5.1",
-    "lexical": "0.50.0",
-    "oxfmt": "0.67.0",
-    "oxlint": "1.82.0",
+    "lexical": "0.51.0",
+    "oxfmt": "0.68.0",
+    "oxlint": "1.83.0",
     "typescript": "7.0.2",
     "vitest": "^5.0.0"
   },
