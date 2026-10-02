@@ -464,6 +464,15 @@ describe("lexicalToPortableText — unknown nodes", () => {
     expect(spans(blocks[0])[0]?.text).toBe("Inside");
   });
 
+  it("keeps direct text children with no paragraph wrapper", () => {
+    const blocks = lexicalToPortableText(
+      state({ type: "callout", version: 1, children: [text("Bare")] } as never),
+      { keyGenerator: counterKeys() },
+    );
+    expect(blocks).toHaveLength(1);
+    expect(spans(blocks[0])[0]?.text).toBe("Bare");
+  });
+
   it("can skip", () => {
     expect(
       lexicalToPortableText(state(unknown as never), {

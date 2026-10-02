@@ -15,7 +15,7 @@ vp install
 
 ```bash
 vp check       # format + lint + type check (tsgo) in one pass
-vp test        # Vitest suite (14 files, 299 tests)
+vp test        # Vitest suite (14 files, 305 tests)
 vp pack        # build dist/ (tsdown: ESM + .d.ts + sourcemap)
 vp run verify  # check + test + pack — the release gate, also prepublishOnly
 ```

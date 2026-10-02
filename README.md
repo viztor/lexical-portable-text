@@ -497,7 +497,7 @@ editor holding a user's work.
 vp test
 ```
 
-299 cases across 14 test files:
+305 cases across 14 test files:
 
 - **features** (`features.test.ts`) — checklists with checked state,
   autolinks, link metadata, custom mark definitions/annotations, inline objects,

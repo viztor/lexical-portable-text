@@ -62,7 +62,14 @@ export interface LexicalNodeFactories {
   tableCell?(children: LexicalNode[]): LexicalNode;
   image?(
     block: ArbitraryTypedObject,
-    meta?: { url?: string; alt?: string; title?: string; width?: number; height?: number },
+    meta?: {
+      url?: string;
+      alt?: string;
+      title?: string;
+      caption?: string;
+      width?: number;
+      height?: number;
+    },
   ): LexicalNode;
   /** Custom block style handler (e.g. "subtitle", "lead", "callout"). */
   blockStyle?(style: string, children: LexicalNode[], block: PortableTextBlock): LexicalNode | null;
@@ -260,7 +267,7 @@ function textBlockToNode(
   options: PortableTextToLexicalOptions,
   rules: Map<string, PortableTextToLexicalRule>,
   annotationRules: Map<string, PortableTextToLexicalAnnotationRule>,
-): LexicalNode {
+): LexicalNode[] {
   const { factories } = options;
   const children = inlineNodes(block, options, rules, annotationRules);
   const style = typeof block.style === "string" ? block.style : "normal";
@@ -276,34 +283,39 @@ function textBlockToNode(
   if (styleRule) {
     const res = styleRule.toLexical(block as ArbitraryTypedObject, context);
     if (res !== null) {
-      const node = Array.isArray(res) ? res[0]! : res;
-      return applyElementFormatting(node, block);
+      // A style rule may return several nodes (or none); keep them all and let
+      // an empty result fall through to the factories instead of pushing
+      // `undefined` into the root.
+      const nodes = Array.isArray(res) ? res : [res];
+      if (nodes.length > 0) {
+        return nodes.map((node) => applyElementFormatting(node, block));
+      }
     }
   }
 
   if (factories.blockStyle) {
     const res = factories.blockStyle(style, children, block);
     if (res !== null) {
-      return applyElementFormatting(res, block);
+      return [applyElementFormatting(res, block)];
     }
   }
 
   if (style === "blockquote") {
     if (factories.quote) {
-      return applyElementFormatting(factories.quote(children), block);
+      return [applyElementFormatting(factories.quote(children), block)];
     }
     options.onMissingFactory?.("quote", block);
-    return applyElementFormatting(factories.paragraph(children), block);
+    return [applyElementFormatting(factories.paragraph(children), block)];
   }
 
   if (style !== "normal") {
     if (factories.heading && HEADING_TAGS.has(style as HeadingTag)) {
-      return applyElementFormatting(factories.heading(style as HeadingTag, children), block);
+      return [applyElementFormatting(factories.heading(style as HeadingTag, children), block)];
     }
     options.onMissingFactory?.("heading", block);
   }
 
-  return applyElementFormatting(factories.paragraph(children), block);
+  return [applyElementFormatting(factories.paragraph(children), block)];
 }
 
 function buildListRun(
@@ -313,7 +325,17 @@ function buildListRun(
   annotationRules: Map<string, PortableTextToLexicalAnnotationRule>,
 ): LexicalNode[] {
   if (run.length === 0) return [];
-  return buildListLevel(run, 0, levelOf(run[0]!), options, rules, annotationRules).nodes;
+  // One walk follows a single nesting chain from the run's base level. A run
+  // that leaves that chain (level 1 → 3 → 2, or 2 → 1) stops the walk, so
+  // restart at the first item the walk could not consume rather than drop it.
+  const nodes: LexicalNode[] = [];
+  let index = 0;
+  while (index < run.length) {
+    const level = buildListLevel(run, index, levelOf(run[index]!), options, rules, annotationRules);
+    nodes.push(...level.nodes);
+    index = level.next > index ? level.next : index + 1;
+  }
+  return nodes;
 }
 
 /**
@@ -346,6 +368,7 @@ function buildListLevel(
     ) {
       const inline = inlineNodes(run[index]! as PortableTextBlock, options, rules, annotationRules);
       const checked = (run[index] as { checked?: unknown }).checked === true;
+      if (!factories.listItem) options.onMissingFactory?.("listItem", run[index]!);
       items.push(
         factories.listItem ? factories.listItem(inline, { checked }) : factories.paragraph(inline),
       );
@@ -371,6 +394,7 @@ function buildListLevel(
     }
 
     const lexicalType = type === "number" ? "number" : type === "check" ? "check" : "bullet";
+    if (!factories.list) options.onMissingFactory?.("list", first);
     nodes.push(factories.list ? factories.list(lexicalType, items) : factories.paragraph(items));
   }
 
@@ -435,6 +459,7 @@ function objectBlockToNode(
       }
       return [factories.table(rows)];
     }
+    options.onMissingFactory?.("table", block);
   }
 
   if (block._type === "image") {
@@ -444,10 +469,14 @@ function objectBlockToNode(
       const url = typeof rawUrl === "string" ? rawUrl : undefined;
       const alt = typeof img.alt === "string" ? img.alt : undefined;
       const title = typeof img.title === "string" ? img.title : undefined;
+      const caption = typeof img.caption === "string" ? img.caption : undefined;
       const width = typeof img.width === "number" ? img.width : undefined;
       const height = typeof img.height === "number" ? img.height : undefined;
-      return [factories.image(block as ArbitraryTypedObject, { url, alt, title, width, height })];
+      return [
+        factories.image(block as ArbitraryTypedObject, { url, alt, title, caption, width, height }),
+      ];
     }
+    options.onMissingFactory?.("image", block);
   }
 
   const object = factories.object?.(block as ArbitraryTypedObject);
@@ -480,7 +509,7 @@ function blocksToNodes(
     }
 
     if (block._type === "block") {
-      out.push(textBlockToNode(block as PortableTextBlock, options, rules, annotationRules));
+      out.push(...textBlockToNode(block as PortableTextBlock, options, rules, annotationRules));
       index += 1;
       continue;
     }

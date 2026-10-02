@@ -622,6 +622,37 @@ describe("portableTextToLexical — object blocks", () => {
     expect(rootChildren(editor)).toHaveLength(2);
   });
 
+  it("keeps every node a style rule returns, and survives an empty array", () => {
+    const editor = makeEditor();
+    portableTextToLexical(
+      editor,
+      [
+        textBlock([span("first")], { style: "multi" }),
+        textBlock([span("second")], { style: "void" }),
+      ],
+      {
+        factories,
+        rules: [
+          {
+            type: "multi",
+            toLexical: () => [
+              $createParagraphNode().append($createTextNode("one")),
+              $createParagraphNode().append($createTextNode("two")),
+            ],
+          },
+          { type: "void", toLexical: () => [] },
+        ],
+      },
+    );
+    const text = rootChildren(editor)
+      .map((node) => textOf(node))
+      .join("|");
+    expect(text).toContain("one");
+    expect(text).toContain("two");
+    // An empty array falls back to a paragraph instead of appending `undefined`.
+    expect(text).toContain("second");
+  });
+
   it("falls through to the object factory when a rule returns null", () => {
     const editor = makeEditor();
     portableTextToLexical(editor, [{ _type: "callout", _key: key() }], {
@@ -717,6 +748,30 @@ describe("portableTextToLexical — factory fallbacks", () => {
     );
     expect(rootChildren(editor).map((node) => node.type)).toEqual(["paragraph", "paragraph"]);
     expect(onMissingFactory).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports missing list, listItem, table and image factories", () => {
+    const onMissingFactory = vi.fn();
+    const editor = makeEditor();
+    portableTextToLexical(
+      editor,
+      [
+        textBlock([span("item")], { listItem: "bullet", level: 1 }),
+        {
+          _type: "table",
+          _key: key(),
+          rows: [{ _type: "tableRow", _key: key(), cells: ["a"] }],
+        } as PortableTextContent,
+        { _type: "image", _key: key(), url: "https://example.com/a.png" } as PortableTextContent,
+      ],
+      { factories: minimalFactories, onMissingFactory },
+    );
+    expect(onMissingFactory.mock.calls.map((call) => call[0])).toEqual([
+      "listItem",
+      "list",
+      "table",
+      "image",
+    ]);
   });
 
   it("falls back to a text newline when no linebreak factory exists", () => {

@@ -150,6 +150,13 @@ describe("verifySetup — custom load rules and factories", () => {
     expect(loadRules?.problems[0]).toMatch(/requires both/);
   });
 
+  it("reports a missing editor even when no load rules are configured", () => {
+    const checks = verifySetup({ load: { factories } });
+    const editorCheck = checks.find((check) => check.name === "editorProvided");
+    expect(editorCheck?.ok).toBe(false);
+    expect(allSetupChecksPassed(checks)).toBe(false);
+  });
+
   it("leaves the editor's existing document exactly as it found it", () => {
     const editor = makeEditor();
     portableTextToLexical(

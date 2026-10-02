@@ -129,6 +129,17 @@ function runInEditor<T>(editor: LexicalEditor, probe: () => T): T {
  */
 export function verifySetup(options: VerifySetupOptions = {}): SetupCheck[] {
   const checks: SetupCheck[] = [];
+
+  // Load probes need an editor. Without one the load checks all skip, so a
+  // `load`-only setup would otherwise report every check as passing.
+  if (options.load && !options.editor) {
+    checks.push({
+      name: "editorProvided",
+      ok: false,
+      problems: ["load checks require an `editor`: pass one alongside `load`"],
+    });
+  }
+
   const saveOptions = options.save ?? {};
   const loadOptions = effectiveLoadOptions(options);
 

@@ -547,8 +547,19 @@ function convertBlocks(
   context: LexicalToPortableTextContext,
 ): PortableTextContent[] {
   const out: PortableTextContent[] = [];
+  // Inline leaves (e.g. `text` directly under an unknown wrapper) have no
+  // block-level case; group them here and flush into blocks so the "children"
+  // policy never silently drops content.
+  const inlineRun: SerializedLexicalNode[] = [];
+  const flushInlineRun = (): void => {
+    if (inlineRun.length === 0) return;
+    const pending = inlineRun.splice(0, inlineRun.length);
+    out.push(textBlock("normal", pending, key, options, rules, annotationRulesParam, context));
+  };
 
   for (const child of children) {
+    // Anything pushed as a block comes after the inline text seen before it.
+    flushInlineRun();
     const rule = rules.get(child.type);
     if (rule) {
       const result = rule.toPortableText(child, context);
@@ -700,6 +711,11 @@ function convertBlocks(
           );
         }
         if (policy === "skip") break;
+        if (child.type === "text") {
+          // Leaf with text content: keep it as inline content.
+          inlineRun.push(child);
+          break;
+        }
         if (hasChildren(child)) {
           out.push(
             ...convertBlocks(child.children, key, options, rules, annotationRulesParam, context),
@@ -710,5 +726,6 @@ function convertBlocks(
     }
   }
 
+  flushInlineRun();
   return out;
 }

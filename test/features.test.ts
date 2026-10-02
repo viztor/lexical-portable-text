@@ -877,6 +877,7 @@ describe("Feature: Image blocks", () => {
         _key: "img1",
         url: "https://cdn.sanity.io/images/demo.png",
         alt: "Demo graphic",
+        caption: "Sunset over the bay",
         width: 640,
         height: 480,
       } as PortableTextImageBlock,
@@ -894,6 +895,7 @@ describe("Feature: Image blocks", () => {
       url: "https://cdn.sanity.io/images/demo.png",
       alt: "Demo graphic",
       title: undefined,
+      caption: "Sunset over the bay",
       width: 640,
       height: 480,
     });

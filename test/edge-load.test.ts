@@ -219,6 +219,42 @@ describe("load — list levels", () => {
     expect(nested).toHaveLength(1);
   });
 
+  it("keeps items when a run leaves its nesting chain (1 → 3 → 2)", () => {
+    const editor = makeEditor();
+    portableTextToLexical(
+      editor,
+      [
+        textBlock([span("A")], { listItem: "bullet", level: 1 }),
+        textBlock([span("B")], { listItem: "bullet", level: 3 }),
+        textBlock([span("C")], { listItem: "bullet", level: 2 }),
+      ],
+      { factories },
+    );
+    const text = rootChildren(editor)
+      .map((node) => textOf(node))
+      .join("");
+    expect(text).toContain("A");
+    expect(text).toContain("B");
+    expect(text).toContain("C");
+  });
+
+  it("keeps items when the run starts deeper than it ends (2 → 1)", () => {
+    const editor = makeEditor();
+    portableTextToLexical(
+      editor,
+      [
+        textBlock([span("Deep")], { listItem: "bullet", level: 2 }),
+        textBlock([span("Top")], { listItem: "bullet", level: 1 }),
+      ],
+      { factories },
+    );
+    const text = rootChildren(editor)
+      .map((node) => textOf(node))
+      .join("");
+    expect(text).toContain("Deep");
+    expect(text).toContain("Top");
+  });
+
   it("handles level 0 as a top-level list", () => {
     const editor = makeEditor();
     portableTextToLexical(editor, [textBlock([span("Zero")], { listItem: "bullet", level: 0 })], {
