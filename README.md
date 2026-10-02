@@ -543,3 +543,30 @@ vp run verify  # check + test + pack — the release gate
 The `package.json` scripts (`check`, `test`, `build`, `format`, `typecheck`, …)
 are thin wrappers over the same `vp` commands, so `pnpm verify` keeps working
 too.
+
+## Releasing
+
+Releases are tag-driven: pushing a `v*` tag runs
+[`.github/workflows/publish.yml`](./.github/workflows/publish.yml), which
+reruns the release gate, verifies the tag matches the `package.json` version,
+packs the tarball, publishes to npm, and creates the GitHub release.
+
+Publishing authenticates through npm
+[trusted publishers](https://docs.npmjs.com/trusted-publishers) (OIDC — no
+`NPM_TOKEN` secret). The relationship for this repository was created with the
+npm CLI (`npm@11.15+`, package write access, account 2FA) and can be inspected
+or replaced at any time:
+
+```bash
+npm trust list lexical-portable-text
+npm trust github lexical-portable-text --file publish.yml \
+  --repo viztor/lexical-portable-text --allow-publish
+```
+
+To cut a release: bump the version in `package.json`, commit it, then push an
+annotated tag whose name matches (`v` + version):
+
+```bash
+git tag -a v0.3.0 -m "v0.3.0"
+git push viztor v0.3.0
+```
