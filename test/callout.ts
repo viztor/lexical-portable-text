@@ -59,19 +59,22 @@ export class CalloutNode extends ElementNode {
   }
 }
 
+/** Non-string junk in `tone` must not leak `[object Object]` into the node. */
+function calloutTone(candidate: unknown): string {
+  const tone = (candidate as { tone?: unknown }).tone;
+  return typeof tone === "string" ? tone : "note";
+}
+
 export const calloutLoad: PortableTextToLexicalOptions = {
   factories: {
     ...factories,
     object: (candidate) =>
-      candidate._type === "callout"
-        ? new CalloutNode(String((candidate as { tone?: unknown }).tone ?? "note"))
-        : null,
+      candidate._type === "callout" ? new CalloutNode(calloutTone(candidate)) : null,
   },
   rules: [
     {
       type: "callout",
-      toLexical: (candidate) =>
-        new CalloutNode(String((candidate as { tone?: unknown }).tone ?? "note")),
+      toLexical: (candidate) => new CalloutNode(calloutTone(candidate)),
     },
   ],
 };

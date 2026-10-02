@@ -203,7 +203,10 @@ function inlineNodes(
           if (typeof def.title === "string") meta.title = def.title;
           if (typeof def.target === "string") meta.target = def.target;
           if (typeof def.rel === "string") meta.rel = def.rel;
-          spanNodes = [factories.link(String(def.href ?? ""), spanNodes, meta)];
+          // `href` is a string per the Portable Text spec; malformed marks
+          // fall back to "" instead of stringifying into "[object Object]".
+          const href = typeof def.href === "string" ? def.href : "";
+          spanNodes = [factories.link(href, spanNodes, meta)];
           continue;
         }
       }

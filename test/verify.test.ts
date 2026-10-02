@@ -4,6 +4,7 @@ import {
   allSetupChecksPassed,
   formatSetupChecks,
   lexicalToPortableText,
+  portableTextToLexical,
   portableTextToLexicalNodes,
   verifySetup,
   type PortableTextBlock,
@@ -147,6 +148,27 @@ describe("verifySetup — custom load rules and factories", () => {
     const loadRules = checks.find((check) => check.name === "loadRules");
     expect(loadRules?.ok).toBe(false);
     expect(loadRules?.problems[0]).toMatch(/requires both/);
+  });
+
+  it("leaves the editor's existing document exactly as it found it", () => {
+    const editor = makeEditor();
+    portableTextToLexical(
+      editor,
+      [
+        {
+          _type: "block",
+          _key: "keep",
+          style: "normal",
+          children: [{ _type: "span", _key: "keep-s", text: "precious content", marks: [] }],
+        },
+      ],
+      { factories },
+    );
+    const before = JSON.stringify(editor.getEditorState().toJSON());
+
+    const checks = verifySetup({ editor, load: { factories } });
+    expect(checks.find((check) => check.name === "roundTripProbe")?.ok).toBe(true);
+    expect(JSON.stringify(editor.getEditorState().toJSON())).toBe(before);
   });
 });
 

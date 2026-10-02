@@ -92,23 +92,6 @@ export interface PipelineIssue {
   message: string;
 }
 
-/** The result of bundling custom block definitions into both options. */
-export interface CustomBlockPipeline {
-  definitions: readonly CustomBlockDefinition[];
-  /** Save options ready for `lexicalToPortableText(input, saveOptions)`. */
-  saveOptions: ConverterOptions;
-  /** Load options requiring the app factory set. */
-  loadOptions(
-    factories: Parameters<typeof Object>[0] extends never
-      ? never
-      : NonNullable<PortableTextToLexicalOptions["factories"]>,
-  ): PortableTextToLexicalOptions;
-  /** Definitions that transpile in only one direction. */
-  issues: PipelineIssue[];
-  /** One-call probe verification (`editor` needed for the load-side checks). */
-  verify(editor: LexicalEditor): SetupCheck[];
-}
-
 function isAnnotationDefinition(
   def: CustomBlockDefinition,
 ): def is CustomBlockDefinition & { annotation: true } {
@@ -256,7 +239,7 @@ export function definePipeline(
     }
     const baseChecks = verifySetup({
       save: saveOptions,
-      load: loadOptionsOptions(options.factories),
+      load: buildLoadOptions(options.factories),
       editor,
     });
     if (issues.length > 0) {
@@ -269,7 +252,7 @@ export function definePipeline(
     return baseChecks;
   };
 
-  function loadOptionsOptions(factories: PortableTextToLexicalOptions["factories"]) {
+  function buildLoadOptions(factories: PortableTextToLexicalOptions["factories"]) {
     return {
       ...baseLoad,
       factories,
@@ -281,12 +264,7 @@ export function definePipeline(
   return {
     definitions,
     saveOptions,
-    loadOptions: (factories) => ({
-      ...baseLoad,
-      factories,
-      rules: [...loadRules, ...(baseLoad.rules ?? [])],
-      annotationRules: [...loadAnnotationRules, ...(baseLoad.annotationRules ?? [])],
-    }),
+    loadOptions: buildLoadOptions,
     issues,
     verify,
   };

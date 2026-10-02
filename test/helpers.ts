@@ -244,7 +244,7 @@ export function canonicalize(blocks: unknown): unknown {
     const markMap = new Map<string, string>(
       definitions.map((def) => [
         String(def._key),
-        `${String(def._type)}:${String(def.href ?? "")}`,
+        `${String(def._type)}:${typeof def.href === "string" ? def.href : ""}`,
       ]),
     );
     for (const child of (block.children ?? []) as Array<Record<string, unknown>>) {

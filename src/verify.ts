@@ -9,10 +9,12 @@
  * Save-path checks are pure (no Lexical runtime). Load-path checks build
  * nodes through the caller's factories inside `editor.update` when an
  * `editor` is supplied; without one they report a problem instead of
- * silently passing.
+ * silently passing. The editor's document is left exactly as it was found —
+ * probes snapshot the state first and restore it when they are done, so it
+ * is safe to pass a real editor holding a user's work.
  */
 import type { ArbitraryTypedObject, PortableTextBlock } from "@portabletext/types";
-import type { LexicalEditor } from "lexical";
+import { $getRoot, type EditorState, type LexicalEditor } from "lexical";
 
 import { formatToMarks, marksToFormat } from "./marks.js";
 import { lexicalToPortableText, type ConverterOptions } from "./lexicalToPortableText.js";
@@ -51,7 +53,8 @@ export interface VerifySetupOptions {
   /**
    * Editor used to run load-side probes inside a Lexical update. Required
    * whenever `load` is set; without it the load checks report a problem
-   * instead of passing silently.
+   * instead of passing silently. Its document is snapshotted before the
+   * probes and restored afterwards — a real editor is safe to pass.
    */
   editor?: LexicalEditor;
 }
@@ -318,12 +321,17 @@ export function verifySetup(options: VerifySetupOptions = {}): SetupCheck[] {
     runChecks("roundTripProbe", [
       () => {
         if (!loadOptions) return undefined;
+        const { editor } = loadOptions;
+        // The load path replaces the root (`root.clear()` + append), so keep the
+        // caller's document safe: `editor` may be a real editor holding a user's
+        // work, and a probe must never take it hostage.
+        const previousState = editor.getEditorState();
         try {
           const source = probeBlock([probeSpan("plain "), probeSpan("bold", ["strong"])]);
           // portableTextToLexical (not ...Nodes) so the probe editor actually
           // receives the nodes and the re-save can observe them.
-          runProbeLoad(loadOptions.editor, [source], loadOptions);
-          const saved = lexicalToPortableText(loadOptions.editor, saveOptions);
+          runProbeLoad(editor, [source], loadOptions);
+          const saved = lexicalToPortableText(editor, saveOptions);
           if (saved.length === 0) {
             return "re-save of the probe editor produced no blocks";
           }
@@ -336,6 +344,8 @@ export function verifySetup(options: VerifySetupOptions = {}): SetupCheck[] {
           return undefined;
         } catch (error) {
           return `round-trip probe threw: ${error instanceof Error ? error.message : String(error)}`;
+        } finally {
+          restoreEditorState(editor, previousState);
         }
       },
     ]),
@@ -351,6 +361,26 @@ function runProbeLoad(
   options: PortableTextToLexicalOptions,
 ): void {
   portableTextToLexical(editor, blocks, options);
+}
+
+/**
+ * Put an editor back exactly as the probe found it.
+ *
+ * Lexical refuses to commit an empty state through `setEditorState`, and a
+ * fresh editor *is* empty — so that case restores emptiness the way an editor
+ * gets it in the first place: by clearing the root.
+ */
+function restoreEditorState(editor: LexicalEditor, previousState: EditorState): void {
+  if (!previousState.isEmpty()) {
+    editor.setEditorState(previousState);
+    return;
+  }
+  editor.update(
+    () => {
+      $getRoot().clear();
+    },
+    { discrete: true },
+  );
 }
 
 /** Format a verification result for logs or CI annotations. */
