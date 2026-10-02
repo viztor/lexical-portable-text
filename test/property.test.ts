@@ -6,7 +6,7 @@
  * pass. The generator deliberately avoids the documented lossy cases
  * (task lists, non-link mark definitions, level jumps, breaks inside links).
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   lexicalToPortableText,

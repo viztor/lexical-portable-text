@@ -3,7 +3,7 @@
  * for generated input — we assert the converter never throws under documented
  * policies and that its output obeys the Portable Text structural contract.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   lexicalToPortableText,

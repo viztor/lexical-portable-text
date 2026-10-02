@@ -3,7 +3,7 @@ import { $createLinkNode } from "@lexical/link";
 import { $createListItemNode, $createListNode } from "@lexical/list";
 import { $createHeadingNode } from "@lexical/rich-text";
 import { $createTextNode, type LexicalNode } from "lexical";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
   LEXICAL_FORMAT,

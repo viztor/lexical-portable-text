@@ -489,10 +489,12 @@ if (!allSetupChecksPassed(checks)) {
 
 All checks are vacuously true for default setups, so the same call works when
 nothing is customized. Load-side checks require an `editor`; a missing editor
-is reported as a problem rather than silently skipped.
+is reported as a problem rather than silently skipped. Probes snapshot the
+editor's document and restore it afterwards, so it is safe to pass a real
+editor holding a user's work.
 
 ```bash
-pnpm test
+vp test
 ```
 
 298 cases across 14 test files:
@@ -522,3 +524,22 @@ pnpm test
   checklists, 50k-char spans, 30-level lists, 200-deep unknown nesting.
 - **units** — mark mapping (all 32 decorator combinations, collisions,
   custom names) and key generation.
+
+## Development
+
+The package is built and checked entirely with
+[Vite+](https://viteplus.dev) — one `vp` CLI for formatting, linting, type
+checking, tests, and the library build, all configured in
+[`vite.config.ts`](./vite.config.ts):
+
+```bash
+vp install     # install dependencies (wraps pnpm)
+vp check       # format + lint + type check (tsgo) in one pass
+vp test        # Vitest suite
+vp pack        # build dist/ with tsdown (ESM + .d.ts + sourcemap)
+vp run verify  # check + test + pack — the release gate
+```
+
+The `package.json` scripts (`check`, `test`, `build`, `format`, `typecheck`, …)
+are thin wrappers over the same `vp` commands, so `pnpm verify` keeps working
+too.

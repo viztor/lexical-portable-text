@@ -3,7 +3,7 @@
  * by themselves, but they catch accidental O(n²) behaviour and stack issues
  * that unit tests miss. No timing assertions — only completion + shape.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   lexicalToPortableText,

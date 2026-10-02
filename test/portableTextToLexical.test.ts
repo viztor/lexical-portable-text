@@ -1,5 +1,5 @@
 import { $createParagraphNode, $createTextNode, $getRoot, type LexicalNode } from "lexical";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
   LEXICAL_FORMAT,

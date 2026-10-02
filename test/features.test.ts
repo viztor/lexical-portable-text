@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { $createParagraphNode, $createTextNode, type LexicalNode } from "lexical";
 import { $createLinkNode } from "@lexical/link";
 
