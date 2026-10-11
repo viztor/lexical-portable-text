@@ -393,7 +393,7 @@ function objectBlockToNode(block: PortableTextContent, state: LoadState): Lexica
     if (result !== null) return toNodes(result);
   }
 
-  const builtin = builtinObjectBlock(block, factories, options.onMissingFactory);
+  const builtin = builtinObjectBlock(block, options);
   if (builtin !== null) return builtin;
 
   const object = factories.object?.(block as ArbitraryTypedObject);
@@ -453,9 +453,12 @@ export function portableTextToLexical(
   blocks: readonly PortableTextContent[],
   options: PortableTextToLexicalOptions,
 ): void {
-  const state = createLoadState(options);
   editor.update(
     () => {
+      // Built inside the callback, as before the refactor: Lexical defers a
+      // nested update, so resolving the options any earlier would read them
+      // at a different point in time than the original did.
+      const state = createLoadState(options);
       const root = $getRoot();
       root.clear();
       root.append(...blocksToNodes(blocks, state));

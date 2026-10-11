@@ -237,7 +237,11 @@ export function lexicalToPortableText(
   input: LexicalStateInput,
   options: ConverterOptions = {},
 ): PortableTextContent[] {
-  return convertBlocks(extractChildren(input), createSaveState(options));
+  // Resolve the conversion state before touching `input`: reading a
+  // user-supplied `toJSON()` can have side effects, and this keeps the order
+  // the options were consumed in before the refactor.
+  const state = createSaveState(options);
+  return convertBlocks(extractChildren(input), state);
 }
 
 function convertInline(

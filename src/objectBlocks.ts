@@ -3,14 +3,20 @@
  *
  * `code`, horizontal rules, `table`, and `image` have conventional shapes
  * across the Portable Text ecosystem, so the load path handles them without
- * asking the caller for a rule. `builtinObjectBlock` returns `null` for
- * anything it does not own — including a conventional type whose factory is
- * missing — so the caller can fall through to its own `object` factory.
+ * asking the caller for a rule. `builtinObjectBlock` returns `null` when the
+ * caller should keep looking — an unrecognised type, or `table`/`image` with
+ * no factory configured. `code` and the horizontal-rule aliases always
+ * return: `code` falls back to a paragraph when its factory is missing, and a
+ * horizontal rule with no factory yields `[]` rather than falling through to
+ * the `object` factory.
+ *
+ * The options object (not a bare callback) is passed so `onMissingFactory` is
+ * invoked as a method, matching every other call site in the load path.
  */
 import type { ArbitraryTypedObject } from "@portabletext/types";
 import type { LexicalNode } from "lexical";
 
-import type { LexicalNodeFactories } from "./portableTextToLexical.js";
+import type { PortableTextToLexicalOptions } from "./portableTextToLexical.js";
 import { textChildren } from "./textNodes.js";
 import type { PortableTextContent } from "./types.js";
 
@@ -20,9 +26,9 @@ import type { PortableTextContent } from "./types.js";
  */
 export function builtinObjectBlock(
   block: PortableTextContent,
-  factories: LexicalNodeFactories,
-  onMissingFactory?: (kind: string, block: PortableTextContent) => void,
+  options: PortableTextToLexicalOptions,
 ): LexicalNode[] | null {
+  const { factories } = options;
   if (block._type === "code") {
     const codeBlock = block as unknown as {
       code?: unknown;
@@ -34,7 +40,7 @@ export function builtinObjectBlock(
     const filename = typeof codeBlock.filename === "string" ? codeBlock.filename : undefined;
     const children = textChildren(code, 0, factories);
     if (factories.code) return [factories.code(language, children, { filename })];
-    onMissingFactory?.("code", block);
+    options.onMissingFactory?.("code", block);
     return [factories.paragraph(children)];
   }
 
@@ -67,7 +73,7 @@ export function builtinObjectBlock(
       }
       return [factories.table(rows)];
     }
-    onMissingFactory?.("table", block);
+    options.onMissingFactory?.("table", block);
     return null;
   }
 
@@ -85,7 +91,7 @@ export function builtinObjectBlock(
         factories.image(block as ArbitraryTypedObject, { url, alt, title, caption, width, height }),
       ];
     }
-    onMissingFactory?.("image", block);
+    options.onMissingFactory?.("image", block);
     return null;
   }
 
