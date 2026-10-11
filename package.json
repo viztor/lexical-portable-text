@@ -51,14 +51,14 @@
     "@portabletext/types": "^4.0.2"
   },
   "devDependencies": {
-    "@lexical/code": "0.50.0",
-    "@lexical/headless": "0.50.0",
-    "@lexical/link": "0.50.0",
-    "@lexical/list": "0.50.0",
-    "@lexical/rich-text": "0.50.0",
+    "@lexical/code": "0.52.0",
+    "@lexical/headless": "0.52.0",
+    "@lexical/link": "0.52.0",
+    "@lexical/list": "0.52.0",
+    "@lexical/rich-text": "0.52.0",
     "@types/node": "^26.5.1",
-    "@vitest/coverage-v8": "5.0.1",
-    "lexical": "0.50.0",
+    "@vitest/coverage-v8": "5.0.3",
+    "lexical": "0.52.0",
     "typescript": "7.0.2",
     "vite-plus": "catalog:"
   },

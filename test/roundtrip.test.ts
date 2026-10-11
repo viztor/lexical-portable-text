@@ -1,4 +1,4 @@
-import { CodeNode } from "@lexical/code";
+import { CodeNode, type SerializedCodeNode } from "@lexical/code";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
@@ -26,7 +26,11 @@ class FileCodeNode extends CodeNode {
   getFilename(): string | undefined {
     return this.getLatest().__filename;
   }
-  override exportJSON(): ReturnType<CodeNode["exportJSON"]> & { filename?: string } {
+  override exportJSON(compact?: boolean): SerializedCodeNode & { filename?: string } {
+    // `CodeNode.exportJSON` became overloaded in lexical 0.52 (a `compact`
+    // partial form), so the override states one signature that satisfies both
+    // overloads and always emits the full serialized node plus `filename`.
+    void compact;
     return { ...super.exportJSON(), filename: this.__filename };
   }
 }
