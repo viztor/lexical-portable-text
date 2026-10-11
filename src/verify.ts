@@ -21,7 +21,6 @@ import { lexicalToPortableText, type ConverterOptions } from "./lexicalToPortabl
 import {
   portableTextToLexical,
   portableTextToLexicalNodes,
-  type LexicalNodeFactories,
   type PortableTextToLexicalOptions,
 } from "./portableTextToLexical.js";
 import type { PortableTextContent, PortableTextSpan, SerializedLexicalNode } from "./types.js";
@@ -47,9 +46,7 @@ export interface VerifySetupOptions {
    * Custom load-side options (rules, annotationRules, names, parseAliases)
    * plus the factories object your app wires. Required for load-side checks.
    */
-  load?: Omit<PortableTextToLexicalOptions, "factories"> & {
-    factories: LexicalNodeFactories;
-  };
+  load?: PortableTextToLexicalOptions;
   /**
    * Editor used to run load-side probes inside a Lexical update. Required
    * whenever `load` is set; without it the load checks report a problem

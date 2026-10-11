@@ -30,6 +30,7 @@ import {
 } from "lexical";
 
 import { marksToFormat, type MarkMappingOptions } from "./marks.js";
+import { indexRulesByType } from "./rules.js";
 import type { PortableTextContent, RuleResult } from "./types.js";
 
 export type HeadingTag = "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
@@ -132,6 +133,38 @@ function isListItemBlock(block: PortableTextContent): boolean {
   return block._type === "block" && "listItem" in block;
 }
 
+/**
+ * Everything one load conversion needs, resolved once: the options, the
+ * factories, the rule lookups, and the context handed to user rules. Threading
+ * this through instead of four parallel arguments keeps the recursive helpers
+ * readable and means a rule's `convertBlocks`/`convertInline` recurse with the
+ * same rules rather than re-indexing them on every call.
+ */
+interface LoadState {
+  readonly options: PortableTextToLexicalOptions;
+  readonly factories: LexicalNodeFactories;
+  readonly rules: ReadonlyMap<string, PortableTextToLexicalRule>;
+  readonly annotationRules: ReadonlyMap<string, PortableTextToLexicalAnnotationRule>;
+  readonly context: PortableTextToLexicalContext;
+}
+
+function createLoadState(options: PortableTextToLexicalOptions): LoadState {
+  const state: LoadState = {
+    options,
+    factories: options.factories,
+    rules: indexRulesByType(options.rules),
+    annotationRules: indexRulesByType(options.annotationRules),
+    // `state` is dereferenced only when a rule runs, long after this object is
+    // fully built — the same self-reference the inline contexts used before.
+    context: {
+      options,
+      convertBlocks: (blocks) => blocksToNodes(blocks, state),
+      convertInline: (block) => inlineNodes(block, state),
+    },
+  };
+  return state;
+}
+
 function textChildren(
   text: string,
   format: number,
@@ -148,24 +181,14 @@ function textChildren(
   return nodes;
 }
 
-function inlineNodes(
-  block: PortableTextBlock,
-  options: PortableTextToLexicalOptions,
-  rules: Map<string, PortableTextToLexicalRule>,
-  annotationRules: Map<string, PortableTextToLexicalAnnotationRule>,
-): LexicalNode[] {
-  const { factories } = options;
+function inlineNodes(block: PortableTextBlock, state: LoadState): LexicalNode[] {
+  const { options, factories, rules, annotationRules, context } = state;
   const markDefs = new Map<string, PortableTextMarkDefinition>();
   for (const def of block.markDefs ?? []) {
     if (def._key) markDefs.set(def._key, def);
   }
 
   const nodes: LexicalNode[] = [];
-  const context: PortableTextToLexicalContext = {
-    options,
-    convertBlocks: (childBlocks) => blocksToNodes(childBlocks, options),
-    convertInline: (childBlock) => inlineNodes(childBlock, options, rules, annotationRules),
-  };
 
   for (const child of block.children ?? []) {
     if (child._type !== "span") {
@@ -262,22 +285,10 @@ function applyElementFormatting(node: LexicalNode, block: PortableTextBlock): Le
   return node;
 }
 
-function textBlockToNode(
-  block: PortableTextBlock,
-  options: PortableTextToLexicalOptions,
-  rules: Map<string, PortableTextToLexicalRule>,
-  annotationRules: Map<string, PortableTextToLexicalAnnotationRule>,
-): LexicalNode[] {
-  const { factories } = options;
-  const children = inlineNodes(block, options, rules, annotationRules);
+function textBlockToNode(block: PortableTextBlock, state: LoadState): LexicalNode[] {
+  const { options, factories, rules, context } = state;
+  const children = inlineNodes(block, state);
   const style = typeof block.style === "string" ? block.style : "normal";
-
-  // Check custom block style rule or factory
-  const context: PortableTextToLexicalContext = {
-    options,
-    convertBlocks: (childBlocks) => blocksToNodes(childBlocks, options),
-    convertInline: (childBlock) => inlineNodes(childBlock, options, rules, annotationRules),
-  };
 
   const styleRule = rules.get(style);
   if (styleRule) {
@@ -318,12 +329,7 @@ function textBlockToNode(
   return [applyElementFormatting(factories.paragraph(children), block)];
 }
 
-function buildListRun(
-  run: readonly PortableTextContent[],
-  options: PortableTextToLexicalOptions,
-  rules: Map<string, PortableTextToLexicalRule>,
-  annotationRules: Map<string, PortableTextToLexicalAnnotationRule>,
-): LexicalNode[] {
+function buildListRun(run: readonly PortableTextContent[], state: LoadState): LexicalNode[] {
   if (run.length === 0) return [];
   // One walk follows a single nesting chain from the run's base level. A run
   // that leaves that chain (level 1 → 3 → 2, or 2 → 1) stops the walk, so
@@ -331,7 +337,7 @@ function buildListRun(
   const nodes: LexicalNode[] = [];
   let index = 0;
   while (index < run.length) {
-    const level = buildListLevel(run, index, levelOf(run[index]!), options, rules, annotationRules);
+    const level = buildListLevel(run, index, levelOf(run[index]!), state);
     nodes.push(...level.nodes);
     index = level.next > index ? level.next : index + 1;
   }
@@ -347,11 +353,9 @@ function buildListLevel(
   run: readonly PortableTextContent[],
   start: number,
   level: number,
-  options: PortableTextToLexicalOptions,
-  rules: Map<string, PortableTextToLexicalRule>,
-  annotationRules: Map<string, PortableTextToLexicalAnnotationRule>,
+  state: LoadState,
 ): { nodes: LexicalNode[]; next: number } {
-  const { factories } = options;
+  const { options, factories } = state;
   const nodes: LexicalNode[] = [];
   let index = start;
 
@@ -366,7 +370,7 @@ function buildListLevel(
       levelOf(run[index]!) === level &&
       listItemOf(run[index]!) === type
     ) {
-      const inline = inlineNodes(run[index]! as PortableTextBlock, options, rules, annotationRules);
+      const inline = inlineNodes(run[index]! as PortableTextBlock, state);
       const checked = (run[index] as { checked?: unknown }).checked === true;
       if (!factories.listItem) options.onMissingFactory?.("listItem", run[index]!);
       items.push(
@@ -375,14 +379,7 @@ function buildListLevel(
       index += 1;
 
       if (index < run.length && levelOf(run[index]!) > level) {
-        const nested = buildListLevel(
-          run,
-          index,
-          levelOf(run[index]!),
-          options,
-          rules,
-          annotationRules,
-        );
+        const nested = buildListLevel(run, index, levelOf(run[index]!), state);
         const previous = items[items.length - 1];
         if (previous) {
           if ($isElementNode(previous)) {
@@ -401,13 +398,8 @@ function buildListLevel(
   return { nodes, next: index };
 }
 
-function objectBlockToNode(
-  block: PortableTextContent,
-  options: PortableTextToLexicalOptions,
-  rules: Map<string, PortableTextToLexicalRule>,
-  context: PortableTextToLexicalContext,
-): LexicalNode[] {
-  const { factories } = options;
+function objectBlockToNode(block: PortableTextContent, state: LoadState): LexicalNode[] {
+  const { options, factories, rules, context } = state;
 
   const rule = rules.get(block._type);
   if (rule) {
@@ -486,12 +478,7 @@ function objectBlockToNode(
   return [];
 }
 
-function blocksToNodes(
-  blocks: readonly PortableTextContent[],
-  options: PortableTextToLexicalOptions,
-): LexicalNode[] {
-  const rules = new Map((options.rules ?? []).map((rule) => [rule.type, rule]));
-  const annotationRules = new Map((options.annotationRules ?? []).map((rule) => [rule.type, rule]));
+function blocksToNodes(blocks: readonly PortableTextContent[], state: LoadState): LexicalNode[] {
   const out: LexicalNode[] = [];
   let index = 0;
 
@@ -504,22 +491,17 @@ function blocksToNodes(
         run.push(blocks[index]!);
         index += 1;
       }
-      out.push(...buildListRun(run, options, rules, annotationRules));
+      out.push(...buildListRun(run, state));
       continue;
     }
 
     if (block._type === "block") {
-      out.push(...textBlockToNode(block as PortableTextBlock, options, rules, annotationRules));
+      out.push(...textBlockToNode(block as PortableTextBlock, state));
       index += 1;
       continue;
     }
 
-    const context: PortableTextToLexicalContext = {
-      options,
-      convertBlocks: (childBlocks) => blocksToNodes(childBlocks, options),
-      convertInline: (childBlock) => inlineNodes(childBlock, options, rules, annotationRules),
-    };
-    out.push(...objectBlockToNode(block, options, rules, context));
+    out.push(...objectBlockToNode(block, state));
     index += 1;
   }
 
@@ -534,7 +516,7 @@ export function portableTextToLexicalNodes(
   blocks: readonly PortableTextContent[],
   options: PortableTextToLexicalOptions,
 ): LexicalNode[] {
-  return blocksToNodes(blocks, options);
+  return blocksToNodes(blocks, createLoadState(options));
 }
 
 /**
@@ -546,11 +528,12 @@ export function portableTextToLexical(
   blocks: readonly PortableTextContent[],
   options: PortableTextToLexicalOptions,
 ): void {
+  const state = createLoadState(options);
   editor.update(
     () => {
       const root = $getRoot();
       root.clear();
-      root.append(...blocksToNodes(blocks, options));
+      root.append(...blocksToNodes(blocks, state));
     },
     { discrete: true },
   );

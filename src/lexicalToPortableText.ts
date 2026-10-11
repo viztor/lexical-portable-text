@@ -26,6 +26,7 @@ import type {
 
 import { randomKey } from "./keys.js";
 import { formatToMarks, type MarkMappingOptions } from "./marks.js";
+import { indexRulesByType } from "./rules.js";
 import type {
   KeyGenerator,
   LexicalStateInput,
@@ -196,6 +197,39 @@ function appendBreak(conversion: InlineConversion, key: KeyGenerator): void {
 }
 
 /**
+ * Everything one save conversion needs, resolved once: the key generator, the
+ * options, the rule lookups, and the context handed to user rules. Threading
+ * this through instead of five parallel arguments keeps the recursive helpers
+ * readable and guarantees every nested conversion sees the same rules.
+ */
+interface SaveState {
+  readonly key: KeyGenerator;
+  readonly options: ConverterOptions;
+  readonly rules: ReadonlyMap<string, LexicalToPortableTextRule>;
+  readonly annotationRules: ReadonlyMap<string, LexicalToPortableTextAnnotationRule>;
+  readonly context: LexicalToPortableTextContext;
+}
+
+function createSaveState(options: ConverterOptions): SaveState {
+  const key = options.keyGenerator ?? randomKey;
+  const state: SaveState = {
+    key,
+    options,
+    rules: indexRulesByType(options.rules),
+    annotationRules: indexRulesByType(options.annotationRules),
+    // `state` is dereferenced only when a rule runs, long after this object is
+    // fully built — the same self-reference the inline context used before.
+    context: {
+      key,
+      options,
+      convertInline: (children) => convertInline(children, state),
+      convertBlocks: (children) => convertBlocks(children, state),
+    },
+  };
+  return state;
+}
+
+/**
  * Convert a Lexical serialized editor state (or an editor instance) into
  * Portable Text blocks.
  */
@@ -203,36 +237,19 @@ export function lexicalToPortableText(
   input: LexicalStateInput,
   options: ConverterOptions = {},
 ): PortableTextContent[] {
-  const key = options.keyGenerator ?? randomKey;
-  const rules = new Map((options.rules ?? []).map((rule) => [rule.type, rule]));
-  const annotationRules = new Map((options.annotationRules ?? []).map((rule) => [rule.type, rule]));
-
-  const context: LexicalToPortableTextContext = {
-    key,
-    options,
-    convertInline: (children) =>
-      convertInline(children, key, options, rules, annotationRules, context),
-    convertBlocks: (children) =>
-      convertBlocks(children, key, options, rules, annotationRules, context),
-  };
-
-  const nodes = extractChildren(input);
-  return convertBlocks(nodes, key, options, rules, annotationRules, context);
+  return convertBlocks(extractChildren(input), createSaveState(options));
 }
 
 function convertInline(
   children: readonly SerializedLexicalNode[],
-  key: KeyGenerator,
-  options: ConverterOptions,
-  rules: Map<string, LexicalToPortableTextRule>,
-  annotationRules: Map<string, LexicalToPortableTextAnnotationRule>,
-  context: LexicalToPortableTextContext,
+  state: SaveState,
   extraMarks: readonly string[] = [],
   /** Identical link targets share one mark definition per block. */
   linkMarkKeys: Map<string, string> = new Map(),
   /** Dedupes custom annotation wrappers by their Lexical node `_key`. */
   doneAnnotationKeys: Set<string> = new Set(),
 ): InlineConversion {
+  const { key, options, rules, annotationRules, context } = state;
   const conversion: InlineConversion = {
     children: [],
     markDefs: [],
@@ -254,11 +271,7 @@ function convertInline(
         conversion.markDefs.push(normalizedDef);
         const nested = convertInline(
           (child as SerializedElementNode).children ?? [],
-          key,
-          options,
-          rules,
-          annotationRules,
-          context,
+          state,
           [...extraMarks, defKey],
           linkMarkKeys,
           doneAnnotationKeys,
@@ -344,11 +357,7 @@ function convertInline(
       }
       const nested = convertInline(
         link.children ?? [],
-        key,
-        options,
-        rules,
-        annotationRules,
-        context,
+        state,
         [...extraMarks, markKey],
         linkMarkKeys,
         doneAnnotationKeys,
@@ -365,11 +374,7 @@ function convertInline(
     if (hasChildren(child)) {
       const nested = convertInline(
         child.children,
-        key,
-        options,
-        rules,
-        annotationRules,
-        context,
+        state,
         extraMarks,
         linkMarkKeys,
         doneAnnotationKeys,
@@ -388,26 +393,14 @@ function convertInline(
 function textBlock(
   style: string,
   children: readonly SerializedLexicalNode[],
-  key: KeyGenerator,
-  options: ConverterOptions,
-  rules: Map<string, LexicalToPortableTextRule>,
-  annotationRulesParam: Map<string, LexicalToPortableTextAnnotationRule>,
-  context: LexicalToPortableTextContext,
+  state: SaveState,
   extra?: Partial<PortableTextBlock> & Record<string, unknown>,
   node?: SerializedLexicalNode,
 ): PortableTextBlock {
+  const { key, options } = state;
   // Block key is allocated before its children so keys read in document order.
   const blockKey = key();
-  const inline = convertInline(
-    children,
-    key,
-    options,
-    rules,
-    annotationRulesParam,
-    context,
-    [],
-    new Map(),
-  );
+  const inline = convertInline(children, state, [], new Map());
   const block: PortableTextBlock & Record<string, unknown> = {
     _type: "block",
     _key: blockKey,
@@ -476,19 +469,16 @@ function splitListItem(item: SerializedElementNode): {
 
 function convertList(
   node: SerializedElementNode,
-  key: KeyGenerator,
-  options: ConverterOptions,
-  rules: Map<string, LexicalToPortableTextRule>,
-  annotationRulesParam: Map<string, LexicalToPortableTextAnnotationRule>,
-  context: LexicalToPortableTextContext,
+  state: SaveState,
   out: PortableTextContent[],
   listType: unknown,
   level: number,
 ): void {
+  const { options } = state;
   const type = listItemType(listType, options.checkListMapping);
   for (const item of node.children ?? []) {
     if (item.type !== "listitem") {
-      out.push(...convertBlocks([item], key, options, rules, annotationRulesParam, context));
+      out.push(...convertBlocks([item], state));
       continue;
     }
     const { inline, nested } = splitListItem(item as SerializedElementNode);
@@ -503,17 +493,11 @@ function convertList(
       extra.checked = itemChecked;
     }
 
-    out.push(
-      textBlock("normal", inline, key, options, rules, annotationRulesParam, context, extra, item),
-    );
+    out.push(textBlock("normal", inline, state, extra, item));
     for (const childList of nested) {
       convertList(
         childList,
-        key,
-        options,
-        rules,
-        annotationRulesParam,
-        context,
+        state,
         out,
         (childList as { listType?: unknown }).listType ?? listType,
         level + 1,
@@ -540,12 +524,9 @@ function codeText(children: readonly SerializedLexicalNode[]): string {
 
 function convertBlocks(
   children: readonly SerializedLexicalNode[],
-  key: KeyGenerator,
-  options: ConverterOptions,
-  rules: Map<string, LexicalToPortableTextRule>,
-  annotationRulesParam: Map<string, LexicalToPortableTextAnnotationRule>,
-  context: LexicalToPortableTextContext,
+  state: SaveState,
 ): PortableTextContent[] {
+  const { key, options, rules, context } = state;
   const out: PortableTextContent[] = [];
   // Inline leaves (e.g. `text` directly under an unknown wrapper) have no
   // block-level case; group them here and flush into blocks so the "children"
@@ -554,7 +535,7 @@ function convertBlocks(
   const flushInlineRun = (): void => {
     if (inlineRun.length === 0) return;
     const pending = inlineRun.splice(0, inlineRun.length);
-    out.push(textBlock("normal", pending, key, options, rules, annotationRulesParam, context));
+    out.push(textBlock("normal", pending, state));
   };
 
   for (const child of children) {
@@ -575,11 +556,7 @@ function convertBlocks(
           textBlock(
             "normal",
             (child as SerializedElementNode).children ?? [],
-            key,
-            options,
-            rules,
-            annotationRulesParam,
-            context,
+            state,
             undefined,
             child,
           ),
@@ -593,11 +570,7 @@ function convertBlocks(
           textBlock(
             style,
             (child as SerializedElementNode).children ?? [],
-            key,
-            options,
-            rules,
-            annotationRulesParam,
-            context,
+            state,
             undefined,
             child,
           ),
@@ -610,11 +583,7 @@ function convertBlocks(
           textBlock(
             "blockquote",
             (child as SerializedElementNode).children ?? [],
-            key,
-            options,
-            rules,
-            annotationRulesParam,
-            context,
+            state,
             undefined,
             child,
           ),
@@ -624,11 +593,7 @@ function convertBlocks(
       case "list":
         convertList(
           child as SerializedElementNode,
-          key,
-          options,
-          rules,
-          annotationRulesParam,
-          context,
+          state,
           out,
           (child as { listType?: unknown }).listType,
           1,
@@ -717,9 +682,7 @@ function convertBlocks(
           break;
         }
         if (hasChildren(child)) {
-          out.push(
-            ...convertBlocks(child.children, key, options, rules, annotationRulesParam, context),
-          );
+          out.push(...convertBlocks(child.children, state));
         }
         break;
       }

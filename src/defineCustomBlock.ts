@@ -28,13 +28,13 @@ import type {
   PortableTextToLexicalContext,
   PortableTextToLexicalRule,
 } from "./portableTextToLexical.js";
-import type { RuleResult } from "./types.js";
+import type { PortableTextContent, RuleResult, SerializedLexicalNode } from "./types.js";
 
 import { verifySetup, type SetupCheck } from "./verify.js";
 
 /** Handler signature shared by every save-side half. */
 export type CustomBlockSaveHandler<T> = (
-  node: import("./types.js").SerializedLexicalNode,
+  node: SerializedLexicalNode,
   context: LexicalToPortableTextContext,
 ) => T | null;
 
@@ -75,8 +75,8 @@ export interface CustomBlockDefinition {
    * (omit `_key` to let the converter allocate one).
    */
   save?: CustomBlockSaveHandler<
-    | import("./types.js").PortableTextContent
-    | import("./types.js").PortableTextContent[]
+    | PortableTextContent
+    | PortableTextContent[]
     | ArbitraryTypedObject
     | ArbitraryTypedObject[]
     | PortableTextMarkDefinition
@@ -104,7 +104,7 @@ export interface DefinePipelineOptions {
   /** Base load options without factories (rules here are merged after definitions). */
   load?: Omit<PortableTextToLexicalOptions, "factories">;
   /** Factories used by the load side; also required for `verify()` probes. */
-  factories?: NonNullable<PortableTextToLexicalOptions["factories"]>;
+  factories?: PortableTextToLexicalOptions["factories"];
 }
 
 export interface ConverterPipelineResult {
@@ -152,8 +152,8 @@ export function definePipeline(
 
     if (def.save) {
       const handler = def.save as CustomBlockSaveHandler<
-        | import("./types.js").PortableTextContent
-        | import("./types.js").PortableTextContent[]
+        | PortableTextContent
+        | PortableTextContent[]
         | ArbitraryTypedObject
         | ArbitraryTypedObject[]
         | PortableTextMarkDefinition
