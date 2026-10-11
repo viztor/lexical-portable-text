@@ -22,12 +22,21 @@ vp check            # format + lint + type check (tsgo) in one pass
 vp test             # Vitest suite (16 files, 342 tests)
 vp test --coverage  # same suite plus src/ coverage; thresholds are enforced
 vp pack             # build dist/ (tsdown: ESM + .d.ts + sourcemap)
-vp run verify       # check + test + pack — the release gate, also prepublishOnly
+vp run smoke        # build, pack, and drive the published artifact by name
+vp run verify       # check + test + pack + smoke — the release gate, also prepublishOnly
 ```
 
+`vp run smoke` runs `scripts/smoke-package.mjs`: it packs the tarball, unpacks
+it into a throwaway project, installs it under its published name, and drives
+the public API from there. That is the only check that catches a wrong `files`
+list or a broken `exports` map — everything else passes while a consumer
+breaks.
+
 `vp run verify` caches the scripts it drives once a run succeeds. The cache
-invalidates on source changes and never masks a failing test; force the full
-gate with `vp run verify --no-cache`.
+invalidates on source changes and never masks a failing test. The smoke step
+always re-runs because it rebuilds `dist/`, so the gate keeps the check/test/
+pack cache hits (typically ~4s) without ever skipping the artifact check.
+Force everything with `vp run verify --no-cache`.
 
 ## Commit hooks
 

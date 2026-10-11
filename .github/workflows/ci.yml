@@ -26,3 +26,7 @@ jobs:
       - run: vp check
       - run: vp test --coverage
       - run: vp pack
+      # Proves the artifact npm would receive resolves and works, which
+      # `vp pack` alone does not: a wrong `files` list or `exports` map
+      # passes every other check and only fails for a consumer.
+      - run: vp run smoke

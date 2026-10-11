@@ -43,7 +43,8 @@
     "format:check": "vp fmt --check",
     "check": "vp check",
     "coverage": "vp test --coverage",
-    "verify": "vp check && vp test && vp pack",
+    "smoke": "node scripts/smoke-package.mjs",
+    "verify": "vp check && vp test && vp pack && node scripts/smoke-package.mjs",
     "prepublishOnly": "vp run verify",
     "prepare": "vp config"
   },

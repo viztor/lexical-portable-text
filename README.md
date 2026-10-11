@@ -547,11 +547,18 @@ vp check            # format + lint + type check (tsgo) in one pass
 vp test             # Vitest suite
 vp test --coverage  # the same suite with src/ coverage
 vp pack             # build dist/ with tsdown (ESM + .d.ts + sourcemap)
-vp run verify       # check + test + pack — the release gate
+vp run smoke        # pack and drive the published artifact by package name
+vp run verify       # check + test + pack + smoke — the release gate
 ```
 
 Coverage thresholds live in the `test.coverage` block and are enforced in CI,
 so a regression fails the build rather than quietly reducing coverage.
+
+`vp run smoke` is the only check that validates the *published* artifact
+rather than the working tree: it packs the tarball, unpacks it into a
+throwaway project, installs it under its published name, and drives the public
+API from there. A wrong `files` list or a broken `exports` map passes every
+other check and only fails for a consumer — this catches it.
 
 `vp install` also installs the Git hook dispatcher via the `prepare` script.
 [`.vite-hooks/pre-commit`](./.vite-hooks/pre-commit) runs `vp staged`, which
