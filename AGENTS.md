@@ -19,7 +19,7 @@ outside the supported range even though it is numerically newer.
 
 ```bash
 vp check            # format + lint + type check (tsgo) in one pass
-vp test             # Vitest suite (15 files, 322 tests)
+vp test             # Vitest suite (16 files, 342 tests)
 vp test --coverage  # same suite plus src/ coverage; thresholds are enforced
 vp pack             # build dist/ (tsdown: ESM + .d.ts + sourcemap)
 vp run verify       # check + test + pack — the release gate, also prepublishOnly

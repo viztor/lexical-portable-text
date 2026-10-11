@@ -497,7 +497,7 @@ editor holding a user's work.
 vp test
 ```
 
-322 cases across 15 test files:
+342 cases across 16 test files:
 
 - **features** (`features.test.ts`) — checklists with checked state,
   autolinks, link metadata, custom mark definitions/annotations, inline objects,
@@ -529,6 +529,10 @@ vp test
   rule that throws, an annotation rule that emits no markDefs, a `load` setup
   without an editor, duplicate mark names, and round-trip probe failures,
   plus the `formatSetupChecks` / `allSetupChecksPassed` reporting helpers.
+- **robustness** (`robustness.test.ts`) — malformed and degenerate input on
+  both paths: missing or mistyped fields on code, image and table blocks,
+  absent factories with their documented fallbacks, and
+  `portableTextToPlainText` options, empty spans, and empty table rows.
 
 ## Development
 
