@@ -27,12 +27,12 @@ import type {
 import { randomKey } from "./keys.js";
 import { formatToMarks, type MarkMappingOptions } from "./marks.js";
 import { indexRulesByType } from "./rules.js";
+import { builtinBlockNode, hasChildren } from "./saveNodes.js";
 import type {
   KeyGenerator,
   LexicalStateInput,
   PortableTextContent,
   PortableTextLinkMarkDefinition,
-  PortableTextTableRow,
   RuleResult,
   SerializedElementNode,
   SerializedLexicalNode,
@@ -169,10 +169,6 @@ function extractChildren(input: LexicalStateInput): readonly SerializedLexicalNo
     return [input as SerializedLexicalNode];
   }
   return [];
-}
-
-function hasChildren(node: SerializedLexicalNode): node is SerializedElementNode {
-  return Array.isArray((node as SerializedElementNode).children);
 }
 
 function sameMarks(a: readonly string[], b: readonly string[]): boolean {
@@ -516,22 +512,6 @@ function convertList(
   }
 }
 
-function codeText(children: readonly SerializedLexicalNode[]): string {
-  let text = "";
-  for (const child of children) {
-    if (child.type === "code-highlight" || child.type === "text") {
-      text += (child as SerializedTextNode).text ?? "";
-      continue;
-    }
-    if (child.type === "linebreak") {
-      text += "\n";
-      continue;
-    }
-    if (hasChildren(child)) text += codeText(child.children);
-  }
-  return text;
-}
-
 function convertBlocks(
   children: readonly SerializedLexicalNode[],
   state: SaveState,
@@ -610,75 +590,15 @@ function convertBlocks(
         );
         break;
 
-      case "code": {
-        const language = (child as { language?: unknown }).language;
-        const filename = (child as { filename?: unknown }).filename;
-        const block: PortableTextContent & Record<string, unknown> = {
-          _type: "code",
-          _key: key(),
-          language: typeof language === "string" ? language : null,
-          code: codeText((child as SerializedElementNode).children ?? []),
-        };
-        if (typeof filename === "string" && filename) {
-          block.filename = filename;
-        }
-        out.push(block);
-        break;
-      }
-
-      case "hr":
-      case "horizontalrule":
-      case "horizontal-rule":
-        out.push({ _type: "horizontal-rule", _key: key() });
-        break;
-
-      case "image": {
-        const img = child as Record<string, unknown>;
-        const rawUrl = img.src ?? img.url;
-        const rawAlt = img.altText ?? img.alt;
-        const block: ArbitraryTypedObject = {
-          _type: "image",
-          _key: key(),
-        };
-        if (typeof rawUrl === "string" && rawUrl) block.url = rawUrl;
-        if (typeof rawAlt === "string" && rawAlt) block.alt = rawAlt;
-        if (typeof img.title === "string" && img.title) block.title = img.title;
-        if (typeof img.caption === "string" && img.caption) block.caption = img.caption;
-        if (typeof img.width === "number") block.width = img.width;
-        if (typeof img.height === "number") block.height = img.height;
-        if (img.asset && typeof img.asset === "object") block.asset = img.asset;
-        out.push(block);
-        break;
-      }
-
-      case "table": {
-        const tableKey = key();
-        const rows: PortableTextTableRow[] = [];
-        for (const row of (child as SerializedElementNode).children ?? []) {
-          if (row.type === "tablerow" || row.type === "table-row") {
-            const rowKey = key();
-            const cells: string[] = [];
-            for (const cell of (row as SerializedElementNode).children ?? []) {
-              if (cell.type === "tablecell" || cell.type === "table-cell") {
-                cells.push(codeText((cell as SerializedElementNode).children ?? []));
-              }
-            }
-            rows.push({
-              _type: "tableRow",
-              _key: rowKey,
-              cells,
-            });
-          }
-        }
-        out.push({
-          _type: "table",
-          _key: tableKey,
-          rows,
-        });
-        break;
-      }
-
       default: {
+        // Built-in object blocks are resolved before the unknown-node policy,
+        // so `onUnknownNode: "throw"` still accepts a code block or an image
+        // rather than rejecting a type the converter already understands.
+        const builtin = builtinBlockNode(child, key);
+        if (builtin !== null) {
+          out.push(builtin);
+          break;
+        }
         const policy = options.onUnknownNode ?? "children";
         if (policy === "throw") {
           throw new Error(
