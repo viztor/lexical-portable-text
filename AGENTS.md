@@ -63,7 +63,9 @@ commit with `VP_GIT_HOOKS=0 git commit …`.
   coverage improves, and add tests rather than lowering them.
 - CI uses `voidzero-dev/setup-vp` (exact version pinned in
   `.github/workflows/*.yml`); keep those pins updated when bumping `vite-plus`.
-  There are two jobs: `verify` (check, coverage, pack, smoke) and
-  `peer-minimum`, which reads the floor of the `lexical` peer range from
-  `package.json` and re-runs check and test against it, so raising the range
-  moves the job with it.
+  Three jobs guard the published promises: `verify` (check, coverage, pack,
+  smoke), `peer-minimum` (reads the floor of the `lexical` peer range from
+  `package.json` and re-runs check and test against it), and `node-floor`
+  (runs test and the packed artifact on the `engines.node` floor). Each
+  asserts the version it ended up on, so raising a range moves the job instead
+  of leaving it testing a stale value.

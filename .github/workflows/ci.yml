@@ -66,3 +66,34 @@ jobs:
           " "$min"
       - run: vp check
       - run: vp test
+
+  # `engines.node` is a published promise, and the jobs above only ever run
+  # Node 26 — the top of that range. This one runs the floor and proves the
+  # packed artifact still works there.
+  node-floor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: voidzero-dev/setup-vp@v1.21.2
+        with:
+          # Mirrors the floor of package.json engines.node. The assertion below
+          # fails if engines is raised past this, so the two cannot drift.
+          node-version: 24.11
+          cache: true
+      - run: vp install --frozen-lockfile
+      - name: Assert this job runs at or above the engines floor
+        run: |
+          node -e "
+            const engines = require('./package.json').engines.node;
+            const floor = engines.match(/([0-9]+)\.([0-9]+)/).slice(1).map(Number);
+            const running = process.versions.node.split('.').slice(0, 2).map(Number);
+            const ok = running[0] > floor[0] || (running[0] === floor[0] && running[1] >= floor[1]);
+            if (!ok) {
+              console.error('running Node ' + process.versions.node + ' is below the engines floor ' + floor.join('.'));
+              process.exit(1);
+            }
+            console.log('running Node ' + process.versions.node + ' satisfies engines ' + engines);
+          "
+      - run: vp test
+      - run: vp run smoke
