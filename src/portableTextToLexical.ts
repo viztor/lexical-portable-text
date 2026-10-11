@@ -30,7 +30,9 @@ import {
 } from "lexical";
 
 import { marksToFormat, type MarkMappingOptions } from "./marks.js";
+import { builtinObjectBlock } from "./objectBlocks.js";
 import { indexRulesByType } from "./rules.js";
+import { textChildren } from "./textNodes.js";
 import type { PortableTextContent, RuleResult } from "./types.js";
 
 export type HeadingTag = "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
@@ -163,22 +165,6 @@ function createLoadState(options: PortableTextToLexicalOptions): LoadState {
     },
   };
   return state;
-}
-
-function textChildren(
-  text: string,
-  format: number,
-  factories: LexicalNodeFactories,
-): LexicalNode[] {
-  const parts = text.split("\n");
-  const nodes: LexicalNode[] = [];
-  parts.forEach((part, index) => {
-    if (index > 0) {
-      nodes.push(factories.linebreak ? factories.linebreak() : factories.text("\n", format));
-    }
-    if (part.length > 0) nodes.push(factories.text(part, format));
-  });
-  return nodes;
 }
 
 function inlineNodes(block: PortableTextBlock, state: LoadState): LexicalNode[] {
@@ -407,69 +393,8 @@ function objectBlockToNode(block: PortableTextContent, state: LoadState): Lexica
     if (result !== null) return toNodes(result);
   }
 
-  if (block._type === "code") {
-    const codeBlock = block as unknown as {
-      code?: unknown;
-      language?: unknown;
-      filename?: unknown;
-    };
-    const code = typeof codeBlock.code === "string" ? codeBlock.code : "";
-    const language = typeof codeBlock.language === "string" ? codeBlock.language : null;
-    const filename = typeof codeBlock.filename === "string" ? codeBlock.filename : undefined;
-    const children = textChildren(code, 0, factories);
-    if (factories.code) return [factories.code(language, children, { filename })];
-    options.onMissingFactory?.("code", block);
-    return [factories.paragraph(children)];
-  }
-
-  if (
-    block._type === "horizontal-rule" ||
-    block._type === "hr" ||
-    block._type === "break" ||
-    block._type === "divider"
-  ) {
-    return factories.horizontalRule ? [factories.horizontalRule()] : [];
-  }
-
-  if (block._type === "table") {
-    const tableBlock = block as ArbitraryTypedObject & {
-      rows?: Array<{ cells?: string[] }>;
-    };
-    if (factories.table) {
-      const rows: LexicalNode[] = [];
-      for (const row of tableBlock.rows ?? []) {
-        const cells: LexicalNode[] = [];
-        for (const cellText of row.cells ?? []) {
-          const cellChildren = textChildren(cellText, 0, factories);
-          cells.push(
-            factories.tableCell
-              ? factories.tableCell(cellChildren)
-              : factories.paragraph(cellChildren),
-          );
-        }
-        rows.push(factories.tableRow ? factories.tableRow(cells) : factories.paragraph(cells));
-      }
-      return [factories.table(rows)];
-    }
-    options.onMissingFactory?.("table", block);
-  }
-
-  if (block._type === "image") {
-    if (factories.image) {
-      const img = block as Record<string, unknown>;
-      const rawUrl = img.url ?? (img.asset as Record<string, unknown> | undefined)?.url;
-      const url = typeof rawUrl === "string" ? rawUrl : undefined;
-      const alt = typeof img.alt === "string" ? img.alt : undefined;
-      const title = typeof img.title === "string" ? img.title : undefined;
-      const caption = typeof img.caption === "string" ? img.caption : undefined;
-      const width = typeof img.width === "number" ? img.width : undefined;
-      const height = typeof img.height === "number" ? img.height : undefined;
-      return [
-        factories.image(block as ArbitraryTypedObject, { url, alt, title, caption, width, height }),
-      ];
-    }
-    options.onMissingFactory?.("image", block);
-  }
+  const builtin = builtinObjectBlock(block, factories, options.onMissingFactory);
+  if (builtin !== null) return builtin;
 
   const object = factories.object?.(block as ArbitraryTypedObject);
   if (object) return toNodes(object);
