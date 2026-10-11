@@ -110,8 +110,12 @@ export interface DefinePipelineOptions {
 export interface ConverterPipelineResult {
   /** Save options ready to hand to `lexicalToPortableText`. */
   saveOptions: ConverterOptions;
-  /** Complete load options once the factories are attached. */
-  loadOptions(factories: PortableTextToLexicalOptions["factories"]): PortableTextToLexicalOptions;
+  /**
+   * Complete load options. Pass factories here, or set them once via
+   * `definePipeline(definitions, { factories })` and call this with no
+   * argument.
+   */
+  loadOptions(factories?: PortableTextToLexicalOptions["factories"]): PortableTextToLexicalOptions;
   /** Bundled definitions (as passed in). */
   definitions: readonly CustomBlockDefinition[];
   /** One issue per definition that transpiles in only one direction. */
@@ -252,10 +256,18 @@ export function definePipeline(
     return baseChecks;
   };
 
-  function buildLoadOptions(factories: PortableTextToLexicalOptions["factories"]) {
+  function buildLoadOptions(factories?: PortableTextToLexicalOptions["factories"]) {
+    const resolved = factories ?? options.factories;
+    if (!resolved) {
+      // Failing here beats handing back options with `factories: undefined`,
+      // which would only surface as a confusing crash inside the converter.
+      throw new Error(
+        "[lexical-portable-text] loadOptions() needs factories: pass them to definePipeline({ factories }) or to loadOptions(factories).",
+      );
+    }
     return {
       ...baseLoad,
-      factories,
+      factories: resolved,
       rules: [...loadRules, ...(baseLoad.rules ?? [])],
       annotationRules: [...loadAnnotationRules, ...(baseLoad.annotationRules ?? [])],
     };

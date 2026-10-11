@@ -233,3 +233,31 @@ describe("definePipeline — verification integration", () => {
     expect(loadRules?.ok).toBe(true);
   });
 });
+
+describe("definePipeline — loadOptions factories", () => {
+  it("falls back to the factories given to definePipeline", () => {
+    const pipeline = definePipeline([callout], { factories });
+    const options = pipeline.loadOptions();
+    expect(options.factories).toBe(factories);
+    expect(options.rules?.some((rule) => rule.type === "callout")).toBe(true);
+  });
+
+  it("lets an explicit argument override the pipeline factories", () => {
+    const other = { text: factories.text, paragraph: factories.paragraph };
+    const pipeline = definePipeline([callout], { factories });
+    expect(pipeline.loadOptions(other).factories).toBe(other);
+  });
+
+  it("fails with an actionable message when no factories are available", () => {
+    const pipeline = definePipeline([callout]);
+    expect(() => pipeline.loadOptions()).toThrow(/loadOptions\(\) needs factories/);
+  });
+
+  it("verify() still reports a failing check rather than throwing without factories", () => {
+    const pipeline = definePipeline([callout]);
+    const checks = pipeline.verify();
+    const provided = checks.find((check) => check.name === "factoriesProvided");
+    expect(provided?.ok).toBe(false);
+    expect(provided?.problems[0]).toMatch(/declares load\(\) halves but no factories/);
+  });
+});
