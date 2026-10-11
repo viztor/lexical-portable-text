@@ -45,10 +45,10 @@ export default defineConfig({
       // Ratchet set just below the current figures, so coverage can improve
       // freely but a regression fails the gate.
       thresholds: {
-        statements: 93,
-        branches: 80,
-        functions: 88,
-        lines: 93,
+        statements: 96,
+        branches: 84,
+        functions: 95,
+        lines: 96,
       },
     },
   },

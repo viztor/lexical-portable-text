@@ -12,14 +12,14 @@ vp install
 ```
 
 Requires Node 24.11+ (or 26+), which `package.json` `engines` encodes. Vite+
-1.0.0 itself supports `^22.18.0 || ^24.11.0 || >=26.0.0`, so the Node 25 line
-is outside the supported range even though it is numerically newer.
+itself supports `^22.18.0 || ^24.11.0 || >=26.0.0`, so the Node 25 line is
+outside the supported range even though it is numerically newer.
 
 ## Validate changes
 
 ```bash
 vp check            # format + lint + type check (tsgo) in one pass
-vp test             # Vitest suite (14 files, 305 tests)
+vp test             # Vitest suite (15 files, 322 tests)
 vp test --coverage  # same suite plus src/ coverage; thresholds are enforced
 vp pack             # build dist/ (tsdown: ESM + .d.ts + sourcemap)
 vp run verify       # check + test + pack — the release gate, also prepublishOnly

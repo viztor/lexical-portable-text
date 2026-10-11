@@ -105,7 +105,7 @@ function effectiveLoadOptions(
 ): (PortableTextToLexicalOptions & { editor: LexicalEditor }) | undefined {
   if (!options.load) return undefined;
   if (!options.editor) return undefined;
-  return { ...options.load, factories: options.load.factories, editor: options.editor };
+  return { ...options.load, editor: options.editor };
 }
 
 function runInEditor<T>(editor: LexicalEditor, probe: () => T): T {

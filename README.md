@@ -157,7 +157,7 @@ const pipeline = definePipeline(
 
 pipeline.issues; // [] — one {direction, message} entry per one-sided definition
 pipeline.saveOptions; // -> lexicalToPortableText
-pipeline.loadOptions(factories); // -> portableTextToLexical
+pipeline.loadOptions(); // -> portableTextToLexical (factories from definePipeline)
 pipeline.verify(editor); // runs the full probe check suite from below
 ```
 
@@ -497,7 +497,7 @@ editor holding a user's work.
 vp test
 ```
 
-305 cases across 14 test files:
+322 cases across 15 test files:
 
 - **features** (`features.test.ts`) — checklists with checked state,
   autolinks, link metadata, custom mark definitions/annotations, inline objects,
@@ -524,6 +524,11 @@ vp test
   checklists, 50k-char spans, 30-level lists, 200-deep unknown nesting.
 - **units** — mark mapping (all 32 decorator combinations, collisions,
   custom names) and key generation.
+- **setup verification** (`verify-diagnostics.test.ts`) — every `verifySetup`
+  diagnostic, since the messages are the product: a failing save/load rule, a
+  rule that throws, an annotation rule that emits no markDefs, a `load` setup
+  without an editor, duplicate mark names, and round-trip probe failures,
+  plus the `formatSetupChecks` / `allSetupChecksPassed` reporting helpers.
 
 ## Development
 
