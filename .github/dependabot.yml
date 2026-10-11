@@ -1,5 +1,8 @@
 version: 2
 updates:
+  # Also covers the pnpm catalog pins in pnpm-workspace.yaml (Dependabot has
+  # supported workspace catalogs since the February 2025 GA), so the
+  # `vite-plus` and `vite` catalog entries get weekly update PRs too.
   - package-ecosystem: npm
     directory: /
     schedule:

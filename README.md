@@ -529,20 +529,30 @@ vp test
 
 The package is built and checked entirely with
 [Vite+](https://viteplus.dev) — one `vp` CLI for formatting, linting, type
-checking, tests, and the library build, all configured in
-[`vite.config.ts`](./vite.config.ts):
+checking, tests, coverage, commit hooks, and the library build, all configured
+in [`vite.config.ts`](./vite.config.ts):
 
 ```bash
-vp install     # install dependencies (wraps pnpm)
-vp check       # format + lint + type check (tsgo) in one pass
-vp test        # Vitest suite
-vp pack        # build dist/ with tsdown (ESM + .d.ts + sourcemap)
-vp run verify  # check + test + pack — the release gate
+vp install          # install dependencies (wraps pnpm)
+vp check            # format + lint + type check (tsgo) in one pass
+vp test             # Vitest suite
+vp test --coverage  # the same suite with src/ coverage
+vp pack             # build dist/ with tsdown (ESM + .d.ts + sourcemap)
+vp run verify       # check + test + pack — the release gate
 ```
 
-The `package.json` scripts (`check`, `test`, `build`, `format`, `typecheck`, …)
-are thin wrappers over the same `vp` commands, so `pnpm verify` keeps working
-too.
+Coverage thresholds live in the `test.coverage` block and are enforced in CI,
+so a regression fails the build rather than quietly reducing coverage.
+
+`vp install` also installs the Git hook dispatcher via the `prepare` script.
+[`.vite-hooks/pre-commit`](./.vite-hooks/pre-commit) runs `vp staged`, which
+applies the `staged` block in `vite.config.ts` — formatting and linting the
+files you are about to commit. Use `VP_GIT_HOOKS=0 git commit …` to skip it for
+one commit.
+
+The `package.json` scripts (`check`, `test`, `coverage`, `build`, `format`,
+`typecheck`, …) are thin wrappers over the same `vp` commands, so `pnpm verify`
+keeps working too.
 
 ## Releasing
 

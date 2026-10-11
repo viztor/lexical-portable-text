@@ -42,8 +42,10 @@
     "format": "vp fmt",
     "format:check": "vp fmt --check",
     "check": "vp check",
+    "coverage": "vp test --coverage",
     "verify": "vp check && vp test && vp pack",
-    "prepublishOnly": "vp run verify"
+    "prepublishOnly": "vp run verify",
+    "prepare": "vp config"
   },
   "dependencies": {
     "@portabletext/types": "^4.0.2"
@@ -55,6 +57,7 @@
     "@lexical/list": "0.50.0",
     "@lexical/rich-text": "0.50.0",
     "@types/node": "^26.5.1",
+    "@vitest/coverage-v8": "5.0.1",
     "lexical": "0.50.0",
     "typescript": "7.0.2",
     "vite-plus": "catalog:"
@@ -63,7 +66,7 @@
     "lexical": ">=0.30.0 <1.0.0"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=24.11.0"
   },
   "packageManager": "pnpm@12.3.2"
 }
