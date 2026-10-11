@@ -601,6 +601,12 @@ Releases are tag-driven: pushing a `v*` tag runs
 reruns the release gate, verifies the tag matches the `package.json` version,
 packs the tarball, publishes to npm, and creates the GitHub release.
 
+Release notes are drafted from the commit log by
+[`scripts/release-notes.mjs`](./scripts/release-notes.mjs) (`vp run notes`),
+grouped by conventional-commit type. `gh release create --generate-notes` is
+not used: it groups by merged pull request, and this repository commits
+straight to main, so it would drop nearly every change.
+
 Publishing authenticates through npm
 [trusted publishers](https://docs.npmjs.com/trusted-publishers) (OIDC — no
 `NPM_TOKEN` secret). The relationship for this repository was created with the

@@ -32,6 +32,12 @@ the public API from there. That is the only check that catches a wrong `files`
 list or a broken `exports` map — everything else passes while a consumer
 breaks.
 
+`vp run notes` drafts release notes from the commits since the previous tag,
+grouped by conventional-commit type. The publish workflow uses it instead of
+`gh release create --generate-notes`, which groups by merged pull request and
+so drops everything: this repository commits straight to main. Expand the
+draft after publishing if the release needs a narrative.
+
 `vp run verify` caches the scripts it drives once a run succeeds. The cache
 invalidates on source changes and never masks a failing test. The smoke step
 always re-runs because it rebuilds `dist/`, so the gate keeps the check/test/

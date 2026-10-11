@@ -44,6 +44,7 @@
     "check": "vp check",
     "coverage": "vp test --coverage",
     "smoke": "node scripts/smoke-package.mjs",
+    "notes": "node scripts/release-notes.mjs",
     "verify": "vp check && vp test && vp pack && node scripts/smoke-package.mjs",
     "prepublishOnly": "vp run verify",
     "prepare": "vp config"
