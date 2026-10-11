@@ -465,10 +465,18 @@ Markdown, not Lexical → Markdown directly). For rendering use
 - **Mark name collisions throw.** Two decorators mapping to the same mark name
   (`{ names: { bold: "em" } }`) is ambiguous, so both `formatToMarks` and
   `marksToFormat` raise instead of silently setting two bits.
-- **Missing factories.** `heading`/`quote`/`list`/`code` fall back to
-  `paragraph` and call `onMissingFactory`; unknown object blocks are skipped.
+- **Missing factories.** `heading`/`quote`/`list`/`listItem`/`code` report
+  through `onMissingFactory` and fall back to `paragraph`. `table` and `image`
+  report and then fall through to the `object` factory (skipped if there is
+  none). A horizontal rule with no `horizontalRule` factory yields nothing —
+  it is a known block, so it never reaches `object`.
 - **Unknown nodes on save** follow `onUnknownNode`: salvage children
   (default), skip, or throw.
+- **One rule context per conversion.** Every rule receives the same context
+  object for the whole document, including nested `convertBlocks` /
+  `convertInline` calls, and the rule list is fixed when the conversion
+  starts. Treat it as read-only: anything stored on it is visible to later
+  rules in the same conversion.
 
 ## Testing
 
