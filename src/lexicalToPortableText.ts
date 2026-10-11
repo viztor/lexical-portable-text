@@ -41,6 +41,12 @@ import type {
   SerializedTextNode,
 } from "./types.js";
 
+/**
+ * Handed to every rule during one conversion. A single instance is created
+ * per conversion and reused for the whole document. Treat it as read-only:
+ * anything stored on it is visible to later rules in the same conversion, and
+ * the rule list is fixed when the conversion starts.
+ */
 export interface LexicalToPortableTextContext {
   key: KeyGenerator;
   options: ConverterOptions;

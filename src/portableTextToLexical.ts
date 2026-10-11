@@ -82,6 +82,13 @@ export interface LexicalNodeFactories {
   object?(block: ArbitraryTypedObject): LexicalNode | LexicalNode[] | null;
 }
 
+/**
+ * Handed to every rule during one conversion. A single instance is created
+ * per conversion and reused for the whole document — including nested
+ * `convertBlocks` / `convertInline` calls — mirroring the save path. Treat it
+ * as read-only: anything stored on it is visible to later rules in the same
+ * conversion, and the rule list is fixed when the conversion starts.
+ */
 export interface PortableTextToLexicalContext {
   options: PortableTextToLexicalOptions;
   /** Recursively convert child Portable Text blocks into Lexical nodes. */
