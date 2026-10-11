@@ -49,9 +49,20 @@ jobs:
           # raising the peer range moves this job with it.
           min=$(node -p "require('./package.json').peerDependencies.lexical.match(/>=\s*([0-9][^ ]*)/)[1]")
           echo "minimum peer lexical: $min"
-          vp install -D --no-frozen-lockfile \
+          vp install -D \
             "lexical@$min" "@lexical/code@$min" "@lexical/headless@$min" \
             "@lexical/link@$min" "@lexical/list@$min" "@lexical/rich-text@$min"
-          node -p "'installed lexical: ' + require('./node_modules/lexical/package.json').version"
+          # Fail loudly if the swap did not actually happen: a no-op install
+          # would leave this job testing the newest release while claiming to
+          # test the floor.
+          node -e "
+            const want = process.argv[1];
+            const got = require('./node_modules/lexical/package.json').version;
+            if (got !== want) {
+              console.error('expected lexical ' + want + ', found ' + got);
+              process.exit(1);
+            }
+            console.log('lexical pinned to ' + got);
+          " "$min"
       - run: vp check
       - run: vp test
