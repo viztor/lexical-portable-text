@@ -30,7 +30,9 @@ Convert [Lexical](https://lexical.dev) editor state to and from
 npm install lexical-portable-text
 ```
 
-`lexical` is a peer dependency (`>=0.30.0 <1.0.0`; CI targets 0.50).
+`lexical` is a peer dependency (`>=0.30.0 <1.0.0`). CI runs the suite against
+both ends of that range — the floor and the newest supported release — so the
+promise cannot rot unnoticed.
 
 ## Quick start
 

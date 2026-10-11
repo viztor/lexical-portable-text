@@ -62,4 +62,8 @@ commit with `VP_GIT_HOOKS=0 git commit …`.
   (type-only). The thresholds in `vite.config.ts` are a ratchet: raise them as
   coverage improves, and add tests rather than lowering them.
 - CI uses `voidzero-dev/setup-vp` (exact version pinned in
-  `.github/workflows/*.yml`); keep that pin updated when bumping `vite-plus`.
+  `.github/workflows/*.yml`); keep those pins updated when bumping `vite-plus`.
+  There are two jobs: `verify` (check, coverage, pack, smoke) and
+  `peer-minimum`, which reads the floor of the `lexical` peer range from
+  `package.json` and re-runs check and test against it, so raising the range
+  moves the job with it.
