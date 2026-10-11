@@ -4,6 +4,9 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "lib": ["ES2022", "DOM"],
+    // The suite reads README.md and package.json, so Node's types must be
+    // declared explicitly: tsgo does not pick up @types/node implicitly.
+    "types": ["node"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noEmit": true,

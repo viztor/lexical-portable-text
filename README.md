@@ -238,7 +238,7 @@ const text = portableTextToPlainText(blocks);
 
 | Option                 | Default              | Purpose                                                        |
 | ---------------------- | -------------------- | -------------------------------------------------------------- |
-| `keyGenerator`         | random 12-char key   | Portable Text `_key` generation                                |
+| `keyGenerator`         | `randomKey`          | Portable Text `_key` generation                                |
 | `rules`                | `[]`                 | Custom Lexical node rules (`type`, `toPortableText`)           |
 | `onUnknownNode`        | `"children"`         | `"children"` salvages content, `"skip"` drops, `"throw"` fails |
 | `checkListMapping`     | `"bullet"`           | `"bullet"` for standard Sanity schemas; `"check"` for task lists |
@@ -276,6 +276,18 @@ Lexical packs decorators into a bitmask; Portable Text uses mark names.
 
 Link and autolink nodes become `link` mark definitions (`markDefs`) carrying
 `href`, `title`, `target`, and `rel`; text spans reference them by key.
+
+The table above is exported, not just documented:
+
+- `LEXICAL_FORMAT` — the bit value per decorator
+- `DEFAULT_MARK_NAMES` — the default mark name per decorator, `null` for the
+  opt-in ones
+- `WELL_KNOWN_MARK_ALIASES` — alias → decorator, as recognised by `parseAliases`
+- `formatToMarks(format, options?)` / `marksToFormat(marks, options?)` — the
+  two directions, both throwing on an ambiguous remap
+
+`randomKey` is exported too: it is the default `keyGenerator`, so a custom
+generator can delegate to it for the keys it does not need to control.
 
 ## Supported constructs
 
@@ -499,7 +511,7 @@ editor holding a user's work.
 vp test
 ```
 
-342 cases across 16 test files:
+344 cases across 17 test files:
 
 - **features** (`features.test.ts`) — checklists with checked state,
   autolinks, link metadata, custom mark definitions/annotations, inline objects,
@@ -535,6 +547,8 @@ vp test
   both paths: missing or mistyped fields on code, image and table blocks,
   absent factories with their documented fallbacks, and
   `portableTextToPlainText` options, empty spans, and empty table rows.
+- **documentation** (`docs.test.ts`) — the README mentions every public export,
+  and the `lexical` peer range it prints matches `package.json`.
 
 ## Development
 
